@@ -18,6 +18,8 @@ const RegexType = enum {
     dot,
     begin,
     end,
+    left,
+    right,
     optional,
     star,
     plus,
@@ -49,7 +51,91 @@ pub const CharSet = struct {
 const Regex = struct {
     patt: [MAX_REGEX_OPS]RegOp,
     sets: [MAX_CHAR_SETS]CharSet,
+
+    pub fn match(regex: *const Regex, haystack: []const u8) ?struct { usize, usize } {
+        if (haystack.len == 0) return null;
+        var matchlen: usize = 0;
+        switch (regex.out[0].kind) {
+            .begin => {
+                const width = matchPattern(&regex, matchlen, haystack);
+                if (width) |w| {
+                    return .{ 0, w };
+                } else return null;
+            },
+            else => {
+                while (matchlen < haystack.len) : (matchlen += 1) {
+                    const width = matchPattern(&regex, matchlen, haystack);
+                    if (width) {
+                        return .{ matchlen, matchlen + width };
+                    } else {
+                        matchlen += 1;
+                    }
+                }
+                return null;
+            },
+        }
+    }
 };
+
+pub fn match(haystack: []const u8, pattern: []const u8) ?usize {
+    const maybe_regex = compile(pattern);
+    if (maybe_regex) |regex| {
+        return regex.match(haystack);
+    } else {
+        return null;
+    }
+}
+
+fn matchPattern(regex: *const Regex, i: usize, haystack: []const u8) ?usize {
+    _ = i; // autofix
+    _ = haystack; // autofix
+    var j = 0;
+    var match_len = 0;
+    _ = match_len; // autofix
+    while (j < regex.patt.len) : (j += 1) {
+        const op = regex.patt[j];
+        switch (op.kind) {
+            .unused => break,
+            .optional => {
+                //
+            },
+            .star => {},
+            .etcetc => {},
+        }
+    }
+}
+
+const ascii = std.ascii;
+
+fn matchOne(ops: *const Regex, i: usize, c: u8) bool {
+    switch (ops[i].kind) {
+        .dot => return true, // we match newlines, deal with it
+        .class => return matchClass(ops.sets[ops[i].c_off], c),
+        .not_class => return !matchClass(ops.sets[ops[i].c_off], c),
+        .digit => return ascii.isDigit(c),
+        .not_digit => return !ascii.isDigit(c),
+        .alpha => return ascii.isAlphabetic(c),
+        .not_alpha => return !ascii.isAlphabetic(c),
+        .whitespace => return ascii.isWhitespace(c),
+        .not_whitespace => return !ascii.isWhitespace(c),
+        .char => return (c == ops[i].what.cp),
+        else => unreachable,
+    }
+}
+
+fn matchClass(set: CharSet, c: u8) bool {
+    switch (c) {
+        0...63 => {
+            const cut_c: u6 = @truncate(c);
+            return (set.low | (1 << cut_c)) == set.low;
+        },
+        64...127 => {
+            const cut_c: u6 = @truncate(c);
+            return (set.hi | (1 << cut_c)) == set.hi;
+        },
+        else => return false,
+    }
+}
 
 /// Compile a regex.
 pub fn compile(in: []const u8) ?Regex {
@@ -68,6 +154,7 @@ pub fn compile(in: []const u8) ?Regex {
     var i: usize = 0;
     var j: usize = 0;
     var s: usize = 0;
+    var pump = 0;
     dispatch: while (i < in.len and j + 1 < patt.len) : ({
         j += 1;
         i += 1;
@@ -91,6 +178,18 @@ pub fn compile(in: []const u8) ?Regex {
             },
             '|' => {
                 patt[j] = RegOp{ .kind = .alt, .what = .{ .c_off = -1 } };
+            },
+            '(' => {
+                pump += 1;
+                patt[j] = RegOp{ .kind = .left, .what = .{ .c_off = -1 } };
+            },
+            ')' => {
+                if (pump == 0) {
+                    bad_string = true;
+                    break :dispatch;
+                }
+                pump -= 1;
+                patt[j] = RegOp{ .kind = .right, .what = .{ .c_off = -1 } };
             },
             '\\' => { // character class or escape
                 if (i + 1 == in.len) {
@@ -231,6 +330,10 @@ pub fn compile(in: []const u8) ?Regex {
                 patt[j] = RegOp{ .kind = .char, .what = .{ .cp = c } };
             },
         }
+        if (pump != 0) {
+            std.debug.print("missing closing parenthesis\n");
+            return null;
+        }
         if (bad_string) {
             const tail = switch (i) {
                 0 => "st",
@@ -248,23 +351,3 @@ pub fn compile(in: []const u8) ?Regex {
         return out;
     }
 }
-
-const ascii = std.ascii;
-
-fn matchOne(ops: Regex, i: usize, c: u8) bool {
-    switch (ops[i].kind) {
-        .dot => return true, // we match newlines, deal with it
-        .class => return matchClass(ops.sets[ops[i].c_off], c),
-        .not_class => return !matchClass(ops.sets[ops[i].c_off], c),
-        .digit => return ascii.isDigit(c),
-        .not_digit => return !ascii.isDigit(c),
-        .alpha => return ascii.isAlphabetic(c),
-        .not_alpha => return !ascii.isAlphabetic(c),
-        .whitespace => return ascii.isWhitespace(c),
-        .not_whitespace => return !ascii.isWhitespace(c),
-        .char => return (c == ops[i].what.cp),
-        else => unreachable,
-    }
-}
-
-fn matchClass() void {}
