@@ -196,9 +196,12 @@ fn matchOne(op: RegOp, sets: *const CharSets, c: u8) ?Match {
 
 fn matchStar(patt: []const RegOp, sets: *const CharSets, haystack: []const u8) ?Match {
     var i: usize = 0;
-    const this_patt = thisPattern(patt);
-
-    while (matchPattern(this_patt, sets, haystack[i..])) |m| {
+    const group, const this_patt = thisPattern(patt);
+    const match_fn = if (group)
+        &matchPattern
+    else
+        &matchPatternNoAlts;
+    while (match_fn(this_patt, sets, haystack[i..])) |m| {
         i += m;
         assert(!(i > haystack.len));
         if (i == haystack.len) break;
@@ -207,8 +210,12 @@ fn matchStar(patt: []const RegOp, sets: *const CharSets, haystack: []const u8) ?
 }
 
 fn matchPlus(patt: []const RegOp, sets: *const CharSets, haystack: []const u8) ?Match {
-    const this_patt = thisPattern(patt);
-    const first_m = matchPattern(this_patt, sets, haystack);
+    const group, const this_patt = thisPattern(patt);
+    const match_fn = if (group)
+        &matchPattern
+    else
+        &matchPatternNoAlts;
+    const first_m = match_fn(this_patt, sets, haystack);
     if (first_m == null) return null;
     const i = first_m.?;
     if (i == haystack.len) return Match{ .i = i, .j = nextPattern(patt) };
@@ -237,10 +244,10 @@ fn matchFourPatterns(
     }
 }
 
-fn thisPattern(patt: []const RegOp) []const RegOp {
+fn thisPattern(patt: []const RegOp) struct { bool, []const RegOp } {
     switch (patt[0]) {
-        .left => @panic("NYI"),
-        else => return patt[0..1],
+        .left => return .{ true, sliceGroup(patt) },
+        else => return .{ false, patt[0..1] },
     }
 }
 
@@ -278,6 +285,26 @@ fn sliceAlt(regex: []const RegOp) []const RegOp {
     if (alt_at) |at| {
         return regex[0..at];
     } else unreachable; // verified before dispatch
+}
+
+fn sliceGroup(patt: []const RegOp) []const RegOp {
+    assert(patt[0] == .left);
+    var j: usize = 1;
+    var pump: usize = 0;
+    while (true) : (j += 1) {
+        switch (patt[j]) {
+            .right => {
+                if (pump == 0) {
+                    return patt[1..j];
+                } else {
+                    pump -= 1;
+                }
+            },
+            .left => pump += 1,
+            else => {},
+        }
+    }
+    unreachable;
 }
 
 fn dispatchTwoAlts(regex: []const RegOp, set: *const CharSets, haystack: []const u8) ?usize {
