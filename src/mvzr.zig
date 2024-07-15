@@ -157,6 +157,7 @@ fn matchPatternNoAlts(patt: []const RegOp, sets: *const CharSets, haystack: []co
             .optional => matchOptional(patt[j + 1 ..], sets, haystack[i..]),
             .lazy_star => matchLazyStar(patt[j + 1 ..], sets, haystack[i..]),
             .lazy_plus => matchLazyPlus(patt[j + 1 ..], sets, haystack[i..]),
+            .lazy_optional => matchLazyOptional(patt[j + 1 ..], sets, haystack[i..]),
             else => stub: {
                 std.debug.print("cant match {s}\n", .{@tagName(patt[j])});
                 break :stub Match{ .j = 1, .i = 1 };
@@ -301,6 +302,16 @@ fn matchLazyPlus(patt: []const RegOp, sets: *const CharSets, haystack: []const u
     } else {
         return Match{ .i = i, .j = 1 + nextPattern(patt) };
     }
+}
+
+fn matchLazyOptional(patt: []const RegOp, sets: *const CharSets, haystack: []const u8) ?Match {
+    _, const this_patt = thisPattern(patt);
+    // try the rest first
+    const maybe_match = matchPattern(patt[this_patt.len..], sets, haystack);
+    if (maybe_match) |m| {
+        return Match{ .i = m, .j = 1 + this_patt.len + patt.len };
+    }
+    return matchOptional(patt, sets, haystack);
 }
 
 // TODO this backtracks, maybe rethink that (lockstep is annoying)
@@ -910,9 +921,11 @@ test "match some things" {
     // Fail if pattern isn't complete
     try testFail("^\\w*?abcd", "qqqqabc");
     try testMatchAll("^a*?abc", "abc");
+    try testMatchAll("^1??abc", "abc");
+    try testMatchAll("^1??abc", "1abc");
+    try testMatchAll("^1??1abc", "1abc");
 }
 
 test "workshop" {
-    try testMatchAll("^a+?abc", "aaabc");
     //
 }
