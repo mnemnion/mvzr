@@ -90,7 +90,7 @@ const Regex = struct {
         const patt = regex.patt;
         switch (patt[0]) {
             .begin => {
-                const width = matchPattern(patt[1..], &regex.sets, 0, haystack);
+                const width = matchPattern(patt[1..], &regex.sets, haystack);
                 if (width) |w| {
                     return .{ 0, w };
                 } else return null;
@@ -98,7 +98,7 @@ const Regex = struct {
             else => {
                 var matchlen: usize = 0;
                 while (matchlen < haystack.len) : (matchlen += 1) {
-                    const width = matchPattern(&patt, &regex.sets, matchlen, haystack);
+                    const width = matchPattern(&patt, &regex.sets, haystack[matchlen..]);
                     if (width) |w| {
                         return .{ matchlen, matchlen + w };
                     }
@@ -118,7 +118,7 @@ pub fn match(haystack: []const u8, pattern: []const u8) ?usize {
     }
 }
 
-fn matchPattern(regex: []const RegOp, set: *const CharSets, i: usize, haystack: []const u8) ?usize {
+fn matchPattern(regex: []const RegOp, set: *const CharSets, haystack: []const u8) ?usize {
     var j: usize = 0;
     if (XXX) {
         j += 1;
@@ -126,17 +126,17 @@ fn matchPattern(regex: []const RegOp, set: *const CharSets, i: usize, haystack: 
     const alt_count = countAlt(regex);
     if (alt_count > 0) {
         switch (alt_count) {
-            1 => return dispatchTwoAlts(regex, set, i, haystack),
-            2 => return dispatchThreeAlts(regex, set, i, haystack),
-            3 => return dispatchFourAlts(regex, set, i, haystack),
+            1 => return dispatchTwoAlts(regex, set, haystack),
+            2 => return dispatchThreeAlts(regex, set, haystack),
+            3 => return dispatchFourAlts(regex, set, haystack),
             else => @panic("NYI"),
         }
     }
-    return matchPatternNoAlts(regex, set, i, haystack);
+    return matchPatternNoAlts(regex, set, haystack);
 }
 
-fn matchPatternNoAlts(patt: []const RegOp, sets: *const CharSets, i_in: usize, haystack: []const u8) ?usize {
-    var i = i_in;
+fn matchPatternNoAlts(patt: []const RegOp, sets: *const CharSets, haystack: []const u8) ?usize {
+    var i: usize = 0;
     var j: usize = 0;
     while (j < patt.len and patt[j] != .unused) {
         const maybe_match = switch (patt[j]) {
@@ -151,6 +151,7 @@ fn matchPatternNoAlts(patt: []const RegOp, sets: *const CharSets, i_in: usize, h
             .not_whitespace,
             .char,
             => matchOne(patt[j], sets, haystack[i]),
+            .star => matchStar(patt[1..], sets, haystack[i..]),
             else => stub: {
                 std.debug.print("cant match {s}\n", .{@tagName(patt[j])});
                 break :stub Match{ .j = 1, .i = 1 };
@@ -189,6 +190,12 @@ fn matchOne(op: RegOp, sets: *const CharSets, c: u8) ?Match {
     }
 }
 
+fn matchStar(patt: []const RegOp, sets: *const CharSets, haystack: []const u8) ?Match {
+    const maybe_match = matchPattern(patt, sets, haystack);
+    _ = maybe_match; // autofix
+    return null;
+}
+
 // TODO this backtracks, maybe rethink that (lockstep is annoying)
 fn matchFourPatterns(
     first: []const RegOp,
@@ -196,14 +203,13 @@ fn matchFourPatterns(
     third: []const RegOp,
     fourth: []const RegOp,
     sets: *const CharSets,
-    i: usize,
     haystack: []const u8,
 ) ?usize {
-    const m1m = matchPatternNoAlts(first, sets, i, haystack);
+    const m1m = matchPatternNoAlts(first, sets, haystack);
     if (m1m) |m1| {
         return m1;
     } else {
-        return matchThreePatterns(second, third, fourth, sets, i, haystack);
+        return matchThreePatterns(second, third, fourth, sets, haystack);
     }
 }
 
@@ -212,14 +218,13 @@ fn matchThreePatterns(
     second: []const RegOp,
     third: []const RegOp,
     sets: *const CharSets,
-    i: usize,
     haystack: []const u8,
 ) ?usize {
-    const m1m = matchPatternNoAlts(first, sets, i, haystack);
+    const m1m = matchPatternNoAlts(first, sets, haystack);
     if (m1m) |m1| {
         return m1;
     } else {
-        return matchTwoPatterns(second, third, sets, i, haystack);
+        return matchTwoPatterns(second, third, sets, haystack);
     }
 }
 
@@ -227,14 +232,13 @@ fn matchTwoPatterns(
     first: []const RegOp,
     second: []const RegOp,
     sets: *const CharSets,
-    i: usize,
     haystack: []const u8,
 ) ?usize {
-    const m1m = matchPatternNoAlts(first, sets, i, haystack);
+    const m1m = matchPatternNoAlts(first, sets, haystack);
     if (m1m) |m1| {
         return m1;
     } else {
-        return matchPatternNoAlts(second, sets, i, haystack);
+        return matchPatternNoAlts(second, sets, haystack);
     }
 }
 
@@ -245,25 +249,25 @@ fn sliceAlt(regex: []const RegOp) []const RegOp {
     } else unreachable; // verified before dispatch
 }
 
-fn dispatchTwoAlts(regex: []const RegOp, set: *const CharSets, i: usize, haystack: []const u8) ?usize {
+fn dispatchTwoAlts(regex: []const RegOp, set: *const CharSets, haystack: []const u8) ?usize {
     const first = sliceAlt(regex);
     const second = regex[first.len + 1 ..];
-    return matchTwoPatterns(first, second, set, i, haystack);
+    return matchTwoPatterns(first, second, set, haystack);
 }
 
-fn dispatchThreeAlts(regex: []const RegOp, set: *const CharSets, i: usize, haystack: []const u8) ?usize {
+fn dispatchThreeAlts(regex: []const RegOp, set: *const CharSets, haystack: []const u8) ?usize {
     const first = sliceAlt(regex);
     const second = sliceAlt(regex[first.len + 1 ..]);
     const third = regex[second.len + 1 ..];
-    return matchThreePatterns(first, second, third, set, i, haystack);
+    return matchThreePatterns(first, second, third, set, haystack);
 }
 
-fn dispatchFourAlts(regex: []const RegOp, set: *const CharSets, i: usize, haystack: []const u8) ?usize {
+fn dispatchFourAlts(regex: []const RegOp, set: *const CharSets, haystack: []const u8) ?usize {
     const first = sliceAlt(regex);
     const second = sliceAlt(regex[first.len + 1 ..]);
     const third = sliceAlt(regex[second.len + 1 ..]);
     const fourth = regex[second.len + 1 ..];
-    return matchFourPatterns(first, second, third, fourth, set, i, haystack);
+    return matchFourPatterns(first, second, third, fourth, set, haystack);
 }
 
 fn matchClass(set: CharSet, c: u8) bool {
@@ -330,6 +334,7 @@ fn findRight(patt: *const []const RegOp, j: usize) usize {
 /// Move modifiers to prefix position.
 fn prefixModifier(patt: *[MAX_REGEX_OPS]RegOp, j: usize, op: RegOp) void {
     var find_j = j - 1;
+    // If we already have a modifier, two are not kosher:
     switch (patt[find_j]) {
         .begin,
         .end,
@@ -557,7 +562,6 @@ pub fn compile(in: []const u8) ?Regex {
                                     break :which 0; // that'll show ya
                                 }
                             };
-                            std.debug.print("c_end: {u}\n", .{c_end});
                             if (c1 < c_end + 1) {
                                 for (c1..c_end + 1) |c_range| {
                                     switch (c_range) {
@@ -627,6 +631,11 @@ fn logError(comptime fmt: []const u8, args: anytype) void {
     }
 }
 
+//| TESTS
+
+const expect = std.testing.expect;
+const expectEqual = std.testing.expectEqual;
+
 fn printRegex(regex: *const Regex) void {
     var j: usize = 0;
     var set_max: ?u8 = null;
@@ -692,18 +701,36 @@ fn printCharSet(set: CharSet) !void {
 
 test "compile some things" {
     const a_star = compile("a*").?;
-    printRegex(&a_star);
+    _ = a_star; // autofix
+    // printRegex(&a_star);
     const a_group = compile("(abc)*").?;
-    printRegex(&a_group);
+    _ = a_group; // autofix
+    // printRegex(&a_group);
     const some_alts = compile("a|\\w+|2?").?;
-    printRegex(&some_alts);
+    _ = some_alts; // autofix
+    // printRegex(&some_alts);
     const some_ranges = compile("[a-z][^a-z][abc^-]").?;
-    printRegex(&some_ranges);
+    _ = some_ranges; // autofix
+    // printRegex(&some_ranges);
+}
+
+fn testMatchAll(needle: []const u8, haystack: []const u8, print: bool) !void {
+    const maybe_regex = compile(needle);
+    if (maybe_regex) |regex| {
+        if (print)
+            printRegex(&regex);
+        const maybe_match = regex.match(haystack);
+        if (maybe_match) |m| {
+            try expectEqual(0, m[0]);
+            try expectEqual(haystack.len, m[1]);
+        }
+    } else {
+        try std.testing.expect(false);
+    }
 }
 
 test "match some things" {
-    const abc = compile("abc").?;
-    printRegex(&abc);
-    const start, const end = abc.match("abc").?;
-    std.debug.print("matched from {d} to {d}, '{s}'\n", .{ start, end, ("abc")[start..end] });
+    try testMatchAll("abc", "abc", false);
+    try testMatchAll("[a-z]", "d", false);
+    try testMatchAll("\\W\\w", "3a", true);
 }
