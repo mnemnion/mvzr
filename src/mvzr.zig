@@ -87,7 +87,6 @@ const Regex = struct {
     /// Match a regex pattern in `haystack`, if found, this returns `.{start, end}`
     pub fn match(regex: *const Regex, haystack: []const u8) ?struct { usize, usize } {
         if (haystack.len == 0) return null;
-        // const set_ptr = regex.sets[0..];
         const patt = regex.patt;
         switch (patt[0]) {
             .begin => {
@@ -120,10 +119,6 @@ pub fn match(haystack: []const u8, pattern: []const u8) ?usize {
 }
 
 fn matchPattern(regex: []const RegOp, set: *const CharSets, haystack: []const u8) ?usize {
-    var j: usize = 0;
-    if (XXX) {
-        j += 1;
-    }
     const alt_count = countAlt(regex);
     if (alt_count > 0) {
         switch (alt_count) {
@@ -159,10 +154,8 @@ fn matchPatternNoAlts(patt: []const RegOp, sets: *const CharSets, haystack: []co
             .lazy_plus => matchLazyPlus(patt[j + 1 ..], sets, haystack[i..]),
             .lazy_optional => matchLazyOptional(patt[j + 1 ..], sets, haystack[i..]),
             .end => matchEnd(i, haystack),
-            else => stub: {
-                std.debug.print("cant match {s}\n", .{@tagName(patt[j])});
-                break :stub Match{ .j = 1, .i = 1 };
-            },
+            .left => matchGroup(patt[j..], sets, haystack[i..]),
+            else => unreachable, // probably
         };
         if (maybe_match) |m| {
             j += m.j;
@@ -172,7 +165,7 @@ fn matchPatternNoAlts(patt: []const RegOp, sets: *const CharSets, haystack: []co
         } else {
             return null;
         }
-    } // TODO check that we finished the pattern!
+    }
     if (j == patt.len or patt[j] == .unused or (patt[j] == .end and i == haystack.len))
         return i
     else
@@ -325,7 +318,16 @@ fn matchLazyOptional(patt: []const RegOp, sets: *const CharSets, haystack: []con
     return matchOptional(patt, sets, haystack);
 }
 
-// TODO this backtracks, maybe rethink that (lockstep is annoying)
+fn matchGroup(patt: []const RegOp, sets: *const CharSets, haystack: []const u8) ?Match {
+    const inner_patt = sliceGroup(patt);
+    const maybe_m = matchPattern(inner_patt, sets, haystack);
+    if (maybe_m) |m| {
+        return Match{ .i = m, .j = 2 + inner_patt.len };
+    } else {
+        return null;
+    }
+}
+
 fn matchFourPatterns(
     first: []const RegOp,
     second: []const RegOp,
@@ -513,7 +515,7 @@ fn findRight(patt: []const RegOp, j_in: usize) usize {
 }
 
 /// Move modifiers to prefix position.
-fn prefixModifier(patt: *[MAX_REGEX_OPS]RegOp, j: usize, op: RegOp) void {
+fn prefixModifier(patt: *[MAX_REGEX_OPS]RegOp, j: usize, op: RegOp) bool {
     var find_j = j - 1;
     // If we already have a modifier, two are not kosher:
     switch (patt[find_j]) {
@@ -527,7 +529,10 @@ fn prefixModifier(patt: *[MAX_REGEX_OPS]RegOp, j: usize, op: RegOp) void {
         .lazy_optional,
         .lazy_star,
         .lazy_plus,
-        => @panic("throw here"),
+        => {
+            logError("found a modifier on a modifier", .{});
+            return false;
+        },
         .right => {
             find_j = beforePriorLeft(patt, find_j);
         },
@@ -541,6 +546,7 @@ fn prefixModifier(patt: *[MAX_REGEX_OPS]RegOp, j: usize, op: RegOp) void {
         patt[find_j] = move_op;
         move_op = temp_op;
     }
+    return true;
 }
 
 fn beforePriorLeft(patt: *const [MAX_REGEX_OPS]RegOp, j: usize) usize {
@@ -600,25 +606,49 @@ pub fn compile(in: []const u8) ?Regex {
             '*' => {
                 if (i + 1 < in.len and in[i + 1] == '?') {
                     i += 1;
-                    prefixModifier(patt, j, RegOp{ .lazy_star = {} });
+                    const ok = prefixModifier(patt, j, RegOp{ .lazy_star = {} });
+                    if (!ok) {
+                        bad_string = true;
+                        break :dispatch;
+                    }
                 } else {
-                    prefixModifier(patt, j, RegOp{ .star = {} });
+                    const ok = prefixModifier(patt, j, RegOp{ .star = {} });
+                    if (!ok) {
+                        bad_string = true;
+                        break :dispatch;
+                    }
                 }
             },
             '?' => {
                 if (i + 1 < in.len and in[i + 1] == '?') {
                     i += 1;
-                    prefixModifier(patt, j, RegOp{ .lazy_optional = {} });
+                    const ok = prefixModifier(patt, j, RegOp{ .lazy_optional = {} });
+                    if (!ok) {
+                        bad_string = true;
+                        break :dispatch;
+                    }
                 } else {
-                    prefixModifier(patt, j, RegOp{ .optional = {} });
+                    const ok = prefixModifier(patt, j, RegOp{ .optional = {} });
+                    if (!ok) {
+                        bad_string = true;
+                        break :dispatch;
+                    }
                 }
             },
             '+' => {
                 if (i + 1 < in.len and in[i + 1] == '?') {
                     i += 1;
-                    prefixModifier(patt, j, RegOp{ .lazy_plus = {} });
+                    const ok = prefixModifier(patt, j, RegOp{ .lazy_plus = {} });
+                    if (!ok) {
+                        bad_string = true;
+                        break :dispatch;
+                    }
                 } else {
-                    prefixModifier(patt, j, RegOp{ .plus = {} });
+                    const ok = prefixModifier(patt, j, RegOp{ .plus = {} });
+                    if (!ok) {
+                        bad_string = true;
+                        break :dispatch;
+                    }
                 }
             },
             '|' => {
@@ -661,6 +691,27 @@ pub fn compile(in: []const u8) ?Regex {
                         },
                         'S' => {
                             patt[j] = RegOp{ .not_whitespace = {} };
+                        },
+                        // character escapes
+                        'r' => {
+                            patt[j] = RegOp{ .char = 0x0d };
+                        },
+                        'n' => {
+                            patt[j] = RegOp{ .char = 0x0a };
+                        },
+                        't' => {
+                            patt[j] = RegOp{ .char = 0x09 };
+                        },
+                        // byte literal
+                        'x' => {
+                            i += 1;
+                            var out_buf: [1]u8 = undefined;
+                            const b: []u8 = std.fmt.hexToBytes(&out_buf, in[i .. i + 2]) catch {
+                                bad_string = true;
+                                break :dispatch;
+                            };
+                            i += 1;
+                            patt[j] = RegOp{ .char = b[0] };
                         },
                         else => |ch| {
                             // Others are accepted as escaped, we don't care
@@ -961,6 +1012,8 @@ test "match some things" {
     try testMatchAll("foo|bar|baz", "baz");
     try testMatchAll("foo|bar|baz|quux+", "quuxxxxx");
     try testMatchAll("foo|bar|baz|bux|quux|quuux|quuuux", "quuuux");
+    try testMatchAll("(abc)+d", "abcabcabcd");
+    try testMatchAll("\t\n\r\xff\xff", "\t\n\r\xff\xff");
 }
 
 test "workshop" {
