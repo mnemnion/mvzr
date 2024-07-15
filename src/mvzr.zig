@@ -6,6 +6,8 @@
 const std = @import("std");
 const testing = std.testing;
 
+const XXX = false;
+
 /// Maximum regex operations
 pub const MAX_REGEX_OPS = 50;
 /// Maximum character sets, ASCII only
@@ -35,7 +37,7 @@ pub const RegOp = struct {
     kind: RegexType,
     what: union {
         cp: u21, // codepoint
-        c_off: u32, // offset into character set array
+        c_off: i32, // offset into character set array
     },
 };
 
@@ -52,6 +54,7 @@ const Regex = struct {
 /// Compile a regex.
 pub fn re_compile(in: []const u8) Regex {
     var out = Regex{};
+    var bad_string: bool = false;
     @memset(
         &out.patt,
         RegOp{
@@ -62,20 +65,166 @@ pub fn re_compile(in: []const u8) Regex {
     @memset(&out.sets, .{ .low = 0, .hi = 0 });
     var patt = &out.patt;
     var set = &out.set;
-    _ = set; // autofix
     var i: usize = 0;
     var j: usize = 0;
     var s: usize = 0;
-    _ = s; // autofix
-    while (i < in.len and j + 1 < patt.len) : (j += 1) {
+    dispatch: while (i < in.len and j + 1 < patt.len) : ({
+        j += 1;
+        i += 1;
+    }) {
         const c = in[i];
         switch (c) {
-            '^' => {},
-            '$' => {},
-            '.' => {},
-            '*' => {},
-            '?' => {},
-            '|' => {},
+            '^' => {
+                patt[j] = RegOp{ .kind = .end, .what = .{ .c_off = -1 } };
+            },
+            '$' => {
+                patt[j] = RegOp{ .kind = .begin, .what = .{ .c_off = -1 } };
+            },
+            '.' => {
+                patt[j] = RegOp{ .kind = .dot, .what = .{ .c_off = -1 } };
+            },
+            '*' => {
+                patt[j] = RegOp{ .kind = .star, .what = .{ .c_off = -1 } };
+            },
+            '?' => {
+                patt[j] = RegOp{ .kind = .optional, .what = .{ .c_off = -1 } };
+            },
+            '|' => {
+                patt[j] = RegOp{ .kind = .alt, .what = .{ .c_off = -1 } };
+            },
+            '\\' => { // character class or escape
+                if (i + 1 == in.len) {
+                    bad_string = true;
+                    break :dispatch;
+                } else {
+                    i += 1;
+                    // char patterns
+                    switch (in[i]) {
+                        'd' => {
+                            patt[j] = RegOp{ .kind = .digit, .what = .{ .c_off = -1 } };
+                        },
+                        'D' => {
+                            patt[j] = RegOp{ .kind = .not_digit, .what = .{ .c_off = -1 } };
+                        },
+                        'w' => {
+                            patt[j] = RegOp{ .kind = .alpha, .what = .{ .c_off = -1 } };
+                        },
+                        'W' => {
+                            patt[j] = RegOp{ .kind = .not_alpha, .what = .{ .c_off = -1 } };
+                        },
+                        's' => {
+                            patt[j] = RegOp{ .kind = .whitespace, .what = .{ .c_off = -1 } };
+                        },
+                        'S' => {
+                            patt[j] = RegOp{ .kind = .not_whitespace, .what = .{ .c_off = -1 } };
+                        },
+                        else => |ch| {
+                            // Others are accepted as escaped, we don't care
+                            // if they're special, you're not special, you're
+                            // not my dad, you get the regex you give
+                            patt[j] = RegOp{ .kind = .char, .what = .{ .cp = ch } };
+                        },
+                    }
+                }
+            },
+            '[' => {
+                // character set
+                var low: u64 = 0;
+                var hi: u64 = 0;
+                const this_op: RegOp = which: {
+                    if (i + 1 < in.len and in[i + 1] == '^') {
+                        i += 1;
+                        break :which RegOp{ .kind = .not_class, .what = .{ .c_off = s } };
+                    } else break :which RegOp{ .kind = .class, .what = .{ .coff = s } };
+                };
+
+                while (in[i] != ']' and i < in.len) : (i += 1) {
+                    const c1 = in[i];
+                    if (i + 1 < in.len and in[i + 1] != '-') {
+                        // normal character class
+                        switch (c1) {
+                            0...63 => {
+                                const cut_c: u6 = @truncate(c1);
+                                low |= 1 << cut_c;
+                            },
+                            64...91, 93...127 => {
+                                const cut_c: u6 = @truncate(c1);
+                                hi |= 1 << cut_c;
+                            },
+                            '\\' => { // escaped value, we don't care what
+                                // thought I had established that already but ok
+                                if (i + 1 < in.len) {
+                                    i += 1;
+                                    const c2 = in[i];
+                                    switch (c2) {
+                                        0...63 => {
+                                            const cut_c: u6 = @truncate(c2);
+                                            low |= 1 << cut_c;
+                                        },
+                                        64...127 => {
+                                            const cut_c: u6 = @truncate(c2);
+                                            hi |= 1 << cut_c;
+                                        },
+                                        else => {
+                                            bad_string = true;
+                                            break;
+                                        },
+                                    }
+                                }
+                            },
+                            else => {
+                                bad_string = true;
+                                break :dispatch;
+                            },
+                        }
+                    } else {
+                        // if paired, it's a range
+                        if (i + 2 < in.len and in[i + 2] != ']') {
+                            const c_end = which: {
+                                if (in[i + 2] != '\\') {
+                                    i += 1; // we get one from the while loop
+                                    break :which in[i + 2];
+                                } else if (i + 3 < in.len) {
+                                    i += 2; // likewise
+                                    break :which in[i + 3];
+                                } else {
+                                    // what to do here? don't care, have a 0
+                                    break :which 0; // that'll show ya
+                                }
+                            };
+                            for (c1..c_end) |c_range| {
+                                switch (c_range) {
+                                    0...63 => {
+                                        const cut_c: u6 = @truncate(c_range);
+                                        low |= 1 << cut_c;
+                                    },
+                                    64...127 => {
+                                        const cut_c: u6 = @truncate(c_range);
+                                        hi |= 1 << cut_c;
+                                    },
+                                    else => {
+                                        bad_string = true;
+                                        break :dispatch;
+                                    },
+                                }
+                            }
+                        } else { // '-' in set, value is 45 so
+                            const cut_hyphen: u6 = @truncate('-');
+                            low |= 1 < cut_hyphen;
+                        }
+                    }
+                } // end while
+                if (i == in.len or in[i] != ']') {
+                    bad_string = true;
+                    break :dispatch;
+                }
+                set[s] = CharSet{ .low = low, .hi = hi };
+                s += 1;
+                patt[j] = this_op;
+            },
+            else => { // regular ol' character
+                patt[j] = RegOp{ .kind = .char, .what = .{ .cp = c } };
+            },
         }
     }
 }
