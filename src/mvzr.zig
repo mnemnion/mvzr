@@ -12,20 +12,24 @@ const XXX = false;
 const one: u64 = 1;
 
 /// Maximum regex operations.
-pub const MAX_REGEX_OPS = 50;
+pub const MAX_REGEX_OPS = 64;
 /// Maximum character sets, ASCII only.
-pub const MAX_CHAR_SETS = 10;
+pub const MAX_CHAR_SETS = 8;
 
-const RegexType = enum {
+const RegexType = enum(u8) {
     unused,
     dot,
     begin,
     end,
     left,
     right,
+    alt,
     optional,
     star,
     plus,
+    lazy_optional,
+    lazy_star,
+    lazy_plus,
     char,
     class,
     not_class,
@@ -35,15 +39,31 @@ const RegexType = enum {
     not_alpha,
     whitespace,
     not_whitespace,
-    alt,
 };
 
-pub const RegOp = struct {
-    kind: RegexType,
-    what: union {
-        cp: u21, // codepoint
-        c_off: i32, // offset into character set array
-    },
+pub const RegOp = union(RegexType) {
+    unused: void,
+    dot: void,
+    begin: void,
+    end: void,
+    left: void,
+    right: void,
+    alt: void,
+    optional: void,
+    star: void,
+    plus: void,
+    lazy_optiona: void,
+    lazy_star: void,
+    lazy_plus: void,
+    char: u8, // character byte
+    class: u8, // offset into class array
+    not_class: u8,
+    digit: void,
+    not_digit: void,
+    alpha: void,
+    not_alpha: void,
+    whitespace: void,
+    not_whitespace: void,
 };
 
 pub const CharSet = struct {
@@ -91,11 +111,10 @@ pub fn match(haystack: []const u8, pattern: []const u8) ?usize {
 }
 
 fn matchPattern(regex: *const Regex, i: usize, haystack: []const u8) ?usize {
-    _ = i; // autofix
-    _ = haystack; // autofix
     var j = 0;
-    var match_len = 0;
-    _ = match_len; // autofix
+    if (XXX) {
+        _ = haystack[i];
+    }
     while (j < regex.patt.len) : (j += 1) {
         const op = regex.patt[j];
         switch (op.kind) {
@@ -111,18 +130,18 @@ fn matchPattern(regex: *const Regex, i: usize, haystack: []const u8) ?usize {
 
 const ascii = std.ascii;
 
-fn matchOne(ops: *const Regex, i: usize, c: u8) bool {
-    switch (ops[i].kind) {
+fn matchOne(op: RegOp, sets: *const []const CharSet, c: u8) bool {
+    switch (op) {
         .dot => return true, // we match newlines, deal with it
-        .class => return matchClass(ops.sets[ops[i].c_off], c),
-        .not_class => return !matchClass(ops.sets[ops[i].c_off], c),
+        .class => |c_off| return matchClass(sets[c_off], c),
+        .not_class => |c_off| return !matchClass(sets[c_off], c),
         .digit => return ascii.isDigit(c),
         .not_digit => return !ascii.isDigit(c),
         .alpha => return ascii.isAlphabetic(c),
         .not_alpha => return !ascii.isAlphabetic(c),
         .whitespace => return ascii.isWhitespace(c),
         .not_whitespace => return !ascii.isWhitespace(c),
-        .char => return (c == ops[i].what.cp),
+        .char => |ch| return (c == ch),
         else => unreachable,
     }
 }
@@ -189,26 +208,26 @@ pub fn compile(in: []const u8) ?Regex {
         const c = in[i];
         switch (c) {
             '^' => {
-                patt[j] = RegOp{ .kind = .end, .what = .{ .c_off = -1 } };
+                patt[j] = RegOp{ .end = {} };
             },
             '$' => {
-                patt[j] = RegOp{ .kind = .begin, .what = .{ .c_off = -1 } };
+                patt[j] = RegOp{ .begin = {} };
             },
             '.' => {
-                patt[j] = RegOp{ .kind = .dot, .what = .{ .c_off = -1 } };
+                patt[j] = RegOp{ .dot = {} };
             },
             '*' => {
-                patt[j] = RegOp{ .kind = .star, .what = .{ .c_off = -1 } };
+                patt[j] = RegOp{ .star = {} };
             },
             '?' => {
-                patt[j] = RegOp{ .kind = .optional, .what = .{ .c_off = -1 } };
+                patt[j] = RegOp{ .optional = {} };
             },
             '|' => {
-                patt[j] = RegOp{ .kind = .alt, .what = .{ .c_off = -1 } };
+                patt[j] = RegOp{ .alt = {} };
             },
             '(' => {
                 pump += 1;
-                patt[j] = RegOp{ .kind = .left, .what = .{ .c_off = -1 } };
+                patt[j] = RegOp{ .left = {} };
             },
             ')' => {
                 if (pump == 0) {
@@ -216,7 +235,7 @@ pub fn compile(in: []const u8) ?Regex {
                     break :dispatch;
                 }
                 pump -= 1;
-                patt[j] = RegOp{ .kind = .right, .what = .{ .c_off = -1 } };
+                patt[j] = RegOp{ .right = {} };
             },
             '\\' => { // character class or escape
                 if (i + 1 == in.len) {
@@ -227,28 +246,28 @@ pub fn compile(in: []const u8) ?Regex {
                     // char patterns
                     switch (in[i]) {
                         'd' => {
-                            patt[j] = RegOp{ .kind = .digit, .what = .{ .c_off = -1 } };
+                            patt[j] = RegOp{ .digit = {} };
                         },
                         'D' => {
-                            patt[j] = RegOp{ .kind = .not_digit, .what = .{ .c_off = -1 } };
+                            patt[j] = RegOp{ .not_digit = {} };
                         },
                         'w' => {
-                            patt[j] = RegOp{ .kind = .alpha, .what = .{ .c_off = -1 } };
+                            patt[j] = RegOp{ .alpha = {} };
                         },
                         'W' => {
-                            patt[j] = RegOp{ .kind = .not_alpha, .what = .{ .c_off = -1 } };
+                            patt[j] = RegOp{ .not_alpha = {} };
                         },
                         's' => {
-                            patt[j] = RegOp{ .kind = .whitespace, .what = .{ .c_off = -1 } };
+                            patt[j] = RegOp{ .whitespace = {} };
                         },
                         'S' => {
-                            patt[j] = RegOp{ .kind = .not_whitespace, .what = .{ .c_off = -1 } };
+                            patt[j] = RegOp{ .not_whitespace = .{} };
                         },
                         else => |ch| {
                             // Others are accepted as escaped, we don't care
                             // if they're special, you're not special, you're
                             // not my dad, you get the regex you give
-                            patt[j] = RegOp{ .kind = .char, .what = .{ .cp = ch } };
+                            patt[j] = RegOp{ .char = ch };
                         },
                     }
                 }
@@ -260,8 +279,8 @@ pub fn compile(in: []const u8) ?Regex {
                 const this_op: RegOp = which: {
                     if (i + 1 < in.len and in[i + 1] == '^') {
                         i += 1;
-                        break :which RegOp{ .kind = .not_class, .what = .{ .c_off = s } };
-                    } else break :which RegOp{ .kind = .class, .what = .{ .coff = s } };
+                        break :which RegOp{ .not_class = {} };
+                    } else break :which RegOp{ .class = {} };
                 };
 
                 while (in[i] != ']' and i < in.len) : (i += 1) {
@@ -284,6 +303,7 @@ pub fn compile(in: []const u8) ?Regex {
                             },
                             '\\' => { // escaped value, we don't care what
                                 // thought I had established that already but ok
+                                // TODO handle \n and such
                                 if (i + 1 < in.len) {
                                     i += 1;
                                     const c2 = in[i];
@@ -353,8 +373,8 @@ pub fn compile(in: []const u8) ?Regex {
                 s += 1;
                 patt[j] = this_op;
             },
-            else => { // regular ol' character
-                patt[j] = RegOp{ .kind = .char, .what = .{ .cp = c } };
+            else => |ch| { // regular ol' character
+                patt[j] = RegOp{ .char = ch };
             },
         }
         if (pump != 0) {
