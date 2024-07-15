@@ -4,6 +4,7 @@
 //!
 //! Focused on basic support of runtime-provided regular expressions.
 const std = @import("std");
+const builtin = @import("builtin");
 const testing = std.testing;
 
 const XXX = false;
@@ -303,7 +304,7 @@ pub fn compile(in: []const u8) ?Regex {
 
                 while (in[i] != ']' and i < in.len) : (i += 1) {
                     if (s > set.len) {
-                        std.debug.print("excessive number of character sets\n");
+                        logError("excessive number of character sets\n", .{});
                         bad_string = true;
                         break :dispatch;
                     }
@@ -395,8 +396,12 @@ pub fn compile(in: []const u8) ?Regex {
                 patt[j] = RegOp{ .char = ch };
             },
         }
+        if (j == patt.len and i < in.len) {
+            logError("Ran out of regex slots before reached end of pattern\n", .{});
+            return null;
+        }
         if (pump != 0) {
-            std.debug.print("missing closing parenthesis\n");
+            logError("missing closing parenthesis\n", .{});
             return null;
         }
         if (bad_string) {
@@ -406,13 +411,15 @@ pub fn compile(in: []const u8) ?Regex {
                 2 => "rd",
                 else => "th",
             };
-            std.debug.print("bad string at {d}{s} character\n", .{ i, tail });
-            return null;
-        }
-        if (j == patt.len and i < in.len) {
-            std.debug.print("Ran out of regex slots before reached end of pattern\n");
+            logError("bad string at {d}{s} character\n", .{ i + 1, tail });
             return null;
         }
         return out;
+    }
+}
+
+fn logError(comptime fmt: []const u8, args: anytype) void {
+    if (!builtin.is_test) {
+        std.log.err(fmt, args);
     }
 }
