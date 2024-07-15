@@ -75,8 +75,8 @@ pub const CharSet = struct {
 const CharSets = []const CharSet;
 
 const Regex = struct {
-    patt: [MAX_REGEX_OPS]RegOp,
-    sets: [MAX_CHAR_SETS]CharSet,
+    patt: [MAX_REGEX_OPS]RegOp = [1]RegOp{undefined} ** MAX_REGEX_OPS,
+    sets: [MAX_CHAR_SETS]CharSet = [1]CharSet{undefined} ** MAX_CHAR_SETS,
 
     /// Match a regex pattern in `haystack`, if found, this returns `.{start, end}`
     pub fn match(regex: *const Regex, haystack: []const u8) ?struct { usize, usize } {
@@ -114,10 +114,8 @@ pub fn match(haystack: []const u8, pattern: []const u8) ?usize {
 
 fn matchPattern(regex: []const RegOp, set: *const CharSets, i: usize, haystack: []const u8) ?usize {
     var j = 0;
-    _ = j; // autofix
     if (XXX) {
-        _ = haystack[i];
-        _ = set;
+        j += 1;
     }
     const alt_count = countAlt(regex);
     if (alt_count > 0) {
@@ -294,7 +292,7 @@ fn findRight(patt: *const []const RegOp, j: usize) usize {
 }
 
 /// Move modifiers to prefix position.
-fn prefixModifier(patt: *[]RegOp, j: usize, op: RegOp) void {
+fn prefixModifier(patt: *[MAX_REGEX_OPS]RegOp, j: usize, op: RegOp) void {
     var find_j = j - 1;
     switch (patt[find_j]) {
         .begin,
@@ -311,9 +309,7 @@ fn prefixModifier(patt: *[]RegOp, j: usize, op: RegOp) void {
         .right => {
             find_j = beforePriorLeft(patt, find_j);
         },
-        else => {
-            find_j -= 1;
-        },
+        else => {},
     } // find_j is at our insert offset
     var move_op = patt[find_j];
     patt[find_j] = op;
@@ -325,7 +321,7 @@ fn prefixModifier(patt: *[]RegOp, j: usize, op: RegOp) void {
     }
 }
 
-fn beforePriorLeft(patt: *const []const RegOp, j: usize) usize {
+fn beforePriorLeft(patt: *const [MAX_REGEX_OPS]RegOp, j: usize) usize {
     std.debug.assert(patt[j] == .left);
     var find_j = j - 1;
     var pump: usize = 0;
@@ -354,18 +350,15 @@ pub fn compile(in: []const u8) ?Regex {
     var bad_string: bool = false;
     @memset(
         &out.patt,
-        RegOp{
-            .kind = .unused,
-            .what = .{ .cp = 0 },
-        },
+        RegOp{ .unused = {} },
     );
     @memset(&out.sets, .{ .low = 0, .hi = 0 });
     var patt = &out.patt;
-    var set = &out.set;
+    var sets = &out.sets;
     var i: usize = 0;
     var j: usize = 0;
-    var s: usize = 0;
-    var pump = 0;
+    var s: u8 = 0;
+    var pump: usize = 0;
     dispatch: while (i < in.len and j + 1 < patt.len) : ({
         j += 1;
         i += 1;
@@ -445,7 +438,7 @@ pub fn compile(in: []const u8) ?Regex {
                             patt[j] = RegOp{ .whitespace = {} };
                         },
                         'S' => {
-                            patt[j] = RegOp{ .not_whitespace = .{} };
+                            patt[j] = RegOp{ .not_whitespace = {} };
                         },
                         else => |ch| {
                             // Others are accepted as escaped, we don't care
@@ -463,12 +456,12 @@ pub fn compile(in: []const u8) ?Regex {
                 const this_op: RegOp = which: {
                     if (i + 1 < in.len and in[i + 1] == '^') {
                         i += 1;
-                        break :which RegOp{ .not_class = {} };
-                    } else break :which RegOp{ .class = {} };
+                        break :which RegOp{ .not_class = s };
+                    } else break :which RegOp{ .class = s };
                 };
 
                 while (in[i] != ']' and i < in.len) : (i += 1) {
-                    if (s > set.len) {
+                    if (s > sets.len) {
                         logError("excessive number of character sets\n", .{});
                         bad_string = true;
                         break :dispatch;
@@ -545,7 +538,7 @@ pub fn compile(in: []const u8) ?Regex {
                             }
                         } else { // '-' in set, value is 45 so
                             const cut_hyphen: u6 = @truncate('-');
-                            low |= 1 < cut_hyphen;
+                            low |= one << cut_hyphen;
                         }
                     }
                 } // end while
@@ -553,7 +546,7 @@ pub fn compile(in: []const u8) ?Regex {
                     bad_string = true;
                     break :dispatch;
                 }
-                set[s] = CharSet{ .low = low, .hi = hi };
+                sets[s] = CharSet{ .low = low, .hi = hi };
                 s += 1;
                 patt[j] = this_op;
             },
@@ -561,30 +554,36 @@ pub fn compile(in: []const u8) ?Regex {
                 patt[j] = RegOp{ .char = ch };
             },
         }
-        if (j == patt.len and i < in.len) {
-            logError("Ran out of regex slots before reached end of pattern\n", .{});
-            return null;
-        }
-        if (pump != 0) {
-            logError("missing closing parenthesis\n", .{});
-            return null;
-        }
-        if (bad_string) {
-            const tail = switch (i) {
-                0 => "st",
-                1 => "nd",
-                2 => "rd",
-                else => "th",
-            };
-            logError("bad string at {d}{s} character\n", .{ i + 1, tail });
-            return null;
-        }
-        return out;
+    } // end :dispatch
+    if (j == patt.len and i < in.len) {
+        logError("Ran out of regex slots before reached end of pattern\n", .{});
+        return null;
     }
+    if (pump != 0) {
+        logError("missing closing parenthesis\n", .{});
+        return null;
+    }
+    if (bad_string) {
+        const tail = switch (i) {
+            0 => "st",
+            1 => "nd",
+            2 => "rd",
+            else => "th",
+        };
+        logError("bad string at {d}{s} character\n", .{ i + 1, tail });
+        return null;
+    }
+    return out;
 }
 
 fn logError(comptime fmt: []const u8, args: anytype) void {
     if (!builtin.is_test) {
         std.log.err(fmt, args);
+    } else { // XXX don't ship this
+        std.log.warn(fmt, args);
     }
+}
+
+test "compile some things" {
+    _ = compile("a*");
 }
