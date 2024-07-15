@@ -173,7 +173,7 @@ fn matchPatternNoAlts(patt: []const RegOp, sets: *const CharSets, haystack: []co
             return null;
         }
     } // TODO check that we finished the pattern!
-    if (j == patt.len or patt[j] == .unused)
+    if (j == patt.len or patt[j] == .unused or (patt[j] == .end and i == haystack.len))
         return i
     else
         return null;
@@ -202,9 +202,11 @@ fn matchOne(op: RegOp, sets: *const CharSets, c: u8) ?Match {
     }
 }
 
+// TODO I think this is just `return false`, it
+// shouldn't ever trigger
 fn matchEnd(i: usize, haystack: []const u8) ?Match {
-    if (i + 1 == haystack.len) {
-        return Match{ .i = 1, .j = 1 };
+    if (i == haystack.len) {
+        return Match{ .i = 0, .j = 1 };
     } else {
         return null;
     }
@@ -939,10 +941,11 @@ test "match some things" {
     try testMatchAll("^1??abc", "abc");
     try testMatchAll("^1??abc", "1abc");
     try testMatchAll("^1??1abc", "1abc");
+    try testMatchAll("[^abc]+", "defgh");
+    try testMatchAll("^1??1abc$", "1abc");
+    try testFail("^1??1abc$", "1abccc");
 }
 
 test "workshop" {
-    try testMatchAll("^1??1abc", "1abc");
-    // try testFail("^1??1abc$", "1abccc");
     //
 }
