@@ -72,6 +72,8 @@ pub const CharSet = struct {
     hi: u64 = 0,
 };
 
+const CharSets = []const CharSet;
+
 const Regex = struct {
     patt: [MAX_REGEX_OPS]RegOp,
     sets: [MAX_CHAR_SETS]CharSet,
@@ -80,20 +82,19 @@ const Regex = struct {
     pub fn match(regex: *const Regex, haystack: []const u8) ?struct { usize, usize } {
         if (haystack.len == 0) return null;
         var matchlen: usize = 0;
+        const set_ptr = &regex.sets;
         switch (regex.out[0].kind) {
             .begin => {
-                const width = matchPattern(&regex, matchlen, haystack);
+                const width = matchPattern(regex[0..], set_ptr, matchlen, haystack);
                 if (width) |w| {
                     return .{ 0, w };
                 } else return null;
             },
             else => {
                 while (matchlen < haystack.len) : (matchlen += 1) {
-                    const width = matchPattern(&regex, matchlen, haystack);
+                    const width = matchPattern(regex[1..], set_ptr, matchlen, haystack);
                     if (width) {
                         return .{ matchlen, matchlen + width };
-                    } else {
-                        matchlen += 1;
                     }
                 }
                 return null;
@@ -111,27 +112,35 @@ pub fn match(haystack: []const u8, pattern: []const u8) ?usize {
     }
 }
 
-fn matchPattern(regex: *const Regex, i: usize, haystack: []const u8) ?usize {
+fn matchPattern(regex: []const RegOp, set: *const CharSets, i: usize, haystack: []const u8) ?usize {
     var j = 0;
+    _ = j; // autofix
     if (XXX) {
         _ = haystack[i];
+        _ = set;
     }
-    while (j < regex.patt.len) : (j += 1) {
-        const op = regex.patt[j];
-        switch (op.kind) {
-            .unused => break,
-            .optional => {
-                //
-            },
-            .star => {},
-            .etcetc => {},
+    const alt_count = countAlt(regex);
+    if (alt_count > 0) {
+        switch (alt_count) {
+            1 => return dispatchTwoAlts(regex, set, i, haystack),
+            2 => return dispatchThreeAlts(regex, set, i, haystack),
+            3 => return dispatchFourAlts(regex, set, i, haystack),
+            else => @panic("NYI"),
         }
     }
+    return matchPatternNoAlts(regex, set, i, haystack);
+}
+
+fn matchPatternNoAlts(regex: []const RegOp, set: *const CharSets, i: usize, haystack: []const u8) ?usize {
+    _ = regex; // autofix
+    _ = set; // autofix
+    _ = i; // autofix
+    _ = haystack; // autofix
 }
 
 const ascii = std.ascii;
 
-fn matchOne(op: RegOp, sets: *const []const CharSet, c: u8) bool {
+fn matchOne(op: RegOp, sets: *const CharSets, c: u8) bool {
     switch (op) {
         .dot => return true, // we match newlines, deal with it
         .class => |c_off| return matchClass(sets[c_off], c),
@@ -145,6 +154,83 @@ fn matchOne(op: RegOp, sets: *const []const CharSet, c: u8) bool {
         .char => |ch| return (c == ch),
         else => unreachable,
     }
+}
+
+// TODO this backtracks, maybe rethink that (lockstep is annoying)
+fn matchFourPatterns(
+    first: []const RegOp,
+    second: []const RegOp,
+    third: []const RegOp,
+    fourth: []const RegOp,
+    sets: *const CharSets,
+    i: usize,
+    haystack: []const u8,
+) ?usize {
+    const m1m = matchPatternNoAlts(first, sets, i, haystack);
+    if (m1m) |m1| {
+        return m1;
+    } else {
+        return matchThreePatterns(second, third, fourth, sets, i, haystack);
+    }
+}
+
+fn matchThreePatterns(
+    first: []const RegOp,
+    second: []const RegOp,
+    third: []const RegOp,
+    sets: *const CharSets,
+    i: usize,
+    haystack: []const u8,
+) ?usize {
+    const m1m = matchPatternNoAlts(first, sets, i, haystack);
+    if (m1m) |m1| {
+        return m1;
+    } else {
+        return matchTwoPatterns(second, third, sets, i, haystack);
+    }
+}
+
+fn matchTwoPatterns(
+    first: []const RegOp,
+    second: []const RegOp,
+    sets: *const CharSets,
+    i: usize,
+    haystack: []const u8,
+) ?usize {
+    const m1m = matchPatternNoAlts(first, sets, i, haystack);
+    if (m1m) |m1| {
+        return m1;
+    } else {
+        return matchPatternNoAlts(second, sets, i, haystack);
+    }
+}
+
+fn sliceAlt(regex: []const RegOp) []const RegOp {
+    const alt_at = findAlt(regex);
+    if (alt_at) |at| {
+        return regex[0..at];
+    } else unreachable; // verified before dispatch
+}
+
+fn dispatchTwoAlts(regex: []const RegOp, set: *const CharSets, i: usize, haystack: []const u8) ?usize {
+    const first = sliceAlt(regex);
+    const second = regex[first.len + 1 ..];
+    return matchTwoPatterns(first, second, set, i, haystack);
+}
+
+fn dispatchThreeAlts(regex: []const RegOp, set: *const CharSets, i: usize, haystack: []const u8) ?usize {
+    const first = sliceAlt(regex);
+    const second = sliceAlt(regex[first.len + 1 ..]);
+    const third = regex[second.len + 1 ..];
+    return matchThreePatterns(first, second, third, set, i, haystack);
+}
+
+fn dispatchFourAlts(regex: []const RegOp, set: *const CharSets, i: usize, haystack: []const u8) ?usize {
+    const first = sliceAlt(regex);
+    const second = sliceAlt(regex[first.len + 1 ..]);
+    const third = sliceAlt(regex[second.len + 1 ..]);
+    const fourth = regex[second.len + 1 ..];
+    return matchFourPatterns(first, second, third, fourth, set, i, haystack);
 }
 
 fn matchClass(set: CharSet, c: u8) bool {
@@ -161,7 +247,30 @@ fn matchClass(set: CharSet, c: u8) bool {
     }
 }
 
-fn findAlt(patt: *const []const RegOp, j: usize) ?usize {
+// Count alts which aren't in a group
+fn countAlt(patt: []RegOp) usize {
+    var pump: usize = 0;
+    var alts: usize = 0;
+    for (patt) |op| {
+        switch (op) {
+            .left => {
+                pump += 1;
+            },
+            .right => {
+                pump -= 1;
+            },
+            .alt => {
+                if (pump == 0) {
+                    alts += 1;
+                }
+            },
+            else => {},
+        }
+    }
+    return alts;
+}
+
+fn findAlt(patt: []const RegOp, j: usize) ?usize {
     while (j < patt.len) : (j += 1) {
         if (patt[j].kind == .alt) {
             return j;
@@ -184,6 +293,7 @@ fn findRight(patt: *const []const RegOp, j: usize) usize {
     unreachable;
 }
 
+// TODO this should throw errors
 /// Compile a regex.
 pub fn compile(in: []const u8) ?Regex {
     var out = Regex{};
