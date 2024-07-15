@@ -52,7 +52,7 @@ const Regex = struct {
 };
 
 /// Compile a regex.
-pub fn re_compile(in: []const u8) Regex {
+pub fn compile(in: []const u8) ?Regex {
     var out = Regex{};
     var bad_string: bool = false;
     @memset(
@@ -139,6 +139,11 @@ pub fn re_compile(in: []const u8) Regex {
                 };
 
                 while (in[i] != ']' and i < in.len) : (i += 1) {
+                    if (s > set.len) {
+                        std.debug.print("excessive number of character sets\n");
+                        bad_string = true;
+                        break :dispatch;
+                    }
                     const c1 = in[i];
                     if (i + 1 < in.len and in[i + 1] != '-') {
                         // normal character class
@@ -226,5 +231,40 @@ pub fn re_compile(in: []const u8) Regex {
                 patt[j] = RegOp{ .kind = .char, .what = .{ .cp = c } };
             },
         }
+        if (bad_string) {
+            const tail = switch (i) {
+                0 => "st",
+                1 => "nd",
+                2 => "rd",
+                else => "th",
+            };
+            std.debug.print("bad string at {d}{s} character\n", .{ i, tail });
+            return null;
+        }
+        if (j == patt.len and i < in.len) {
+            std.debug.print("Ran out of regex slots before reached end of pattern\n");
+            return null;
+        }
+        return out;
     }
 }
+
+const ascii = std.ascii;
+
+fn matchOne(ops: Regex, i: usize, c: u8) bool {
+    switch (ops[i].kind) {
+        .dot => return true, // we match newlines, deal with it
+        .class => return matchClass(ops.sets[ops[i].c_off], c),
+        .not_class => return !matchClass(ops.sets[ops[i].c_off], c),
+        .digit => return ascii.isDigit(c),
+        .not_digit => return !ascii.isDigit(c),
+        .alpha => return ascii.isAlphabetic(c),
+        .not_alpha => return !ascii.isAlphabetic(c),
+        .whitespace => return ascii.isWhitespace(c),
+        .not_whitespace => return !ascii.isWhitespace(c),
+        .char => return (c == ops[i].what.cp),
+        else => unreachable,
+    }
+}
+
+fn matchClass() void {}
