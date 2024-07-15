@@ -141,6 +141,29 @@ fn matchClass(set: CharSet, c: u8) bool {
     }
 }
 
+fn findAlt(patt: *const []const RegOp, j: usize) ?usize {
+    while (j < patt.len) : (j += 1) {
+        if (patt[j].kind == .alt) {
+            return j;
+        }
+    }
+    return null;
+}
+
+fn findRight(patt: *const []const RegOp, j: usize) usize {
+    // Compiler made sure these are matched
+    var pump = 0;
+    while (j < patt.len) : (j += 1) {
+        const kind = patt[j].kind;
+        if (kind == .right and pump == 0)
+            return j
+        else
+            continue;
+        if (kind == .left) pump += 1;
+    }
+    unreachable;
+}
+
 /// Compile a regex.
 pub fn compile(in: []const u8) ?Regex {
     var out = Regex{};
