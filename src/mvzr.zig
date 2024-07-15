@@ -53,7 +53,7 @@ pub const RegOp = union(RegexType) {
     optional: void,
     star: void,
     plus: void,
-    lazy_optiona: void,
+    lazy_optional: void,
     lazy_star: void,
     lazy_plus: void,
     char: u8, // character byte
@@ -293,6 +293,60 @@ fn findRight(patt: *const []const RegOp, j: usize) usize {
     unreachable;
 }
 
+/// Move modifiers to prefix position.
+fn prefixModifier(patt: *[]RegOp, j: usize, op: RegOp) void {
+    var find_j = j - 1;
+    switch (patt[find_j]) {
+        .begin,
+        .end,
+        .left,
+        .alt,
+        .optional,
+        .star,
+        .plus,
+        .lazy_optional,
+        .lazy_star,
+        .lazy_plus,
+        => @panic("throw here"),
+        .right => {
+            find_j = beforePriorLeft(patt, find_j);
+        },
+        else => {
+            find_j -= 1;
+        },
+    } // find_j is at our insert offset
+    var move_op = patt[find_j];
+    patt[find_j] = op;
+    find_j += 1;
+    while (move_op != .unused) : (find_j += 1) {
+        const temp_op = patt[find_j];
+        patt[find_j] = move_op;
+        move_op = temp_op;
+    }
+}
+
+fn beforePriorLeft(patt: *const []const RegOp, j: usize) usize {
+    std.debug.assert(patt[j] == .left);
+    var find_j = j - 1;
+    var pump: usize = 0;
+    while (find_j != 0) : (find_j -= 1) {
+        switch (patt[find_j]) {
+            .right => {
+                pump += 1;
+            },
+            .left => {
+                if (pump == 0)
+                    break
+                else
+                    pump -= 1;
+            },
+            else => {},
+        }
+    }
+    if (patt[find_j] != .left) @panic("throw here");
+    return find_j;
+}
+
 // TODO this should throw errors
 /// Compile a regex.
 pub fn compile(in: []const u8) ?Regex {
@@ -327,28 +381,29 @@ pub fn compile(in: []const u8) ?Regex {
             '.' => {
                 patt[j] = RegOp{ .dot = {} };
             },
+
             '*' => {
                 if (i + 1 < in.len and in[i + 1] == '?') {
                     i += 1;
-                    patt[j] = RegOp{ .lazy_star = {} };
+                    prefixModifier(patt, j, RegOp{ .lazy_star = {} });
                 } else {
-                    patt[j] = RegOp{ .star = {} };
+                    prefixModifier(patt, j, RegOp{ .star = {} });
                 }
             },
             '?' => {
                 if (i + 1 < in.len and in[i + 1] == '?') {
                     i += 1;
-                    patt[j] = RegOp{ .lazy_optional = {} };
+                    prefixModifier(patt, j, RegOp{ .lazy_optional = {} });
                 } else {
-                    patt[j] = RegOp{ .optional = {} };
+                    prefixModifier(patt, j, RegOp{ .optional = {} });
                 }
             },
             '+' => {
                 if (i + 1 < in.len and in[i + 1] == '?') {
                     i += 1;
-                    patt[j] = RegOp{ .lazy_plus = {} };
+                    prefixModifier(patt, j, RegOp{ .lazy_plus = {} });
                 } else {
-                    patt[j] = RegOp{ .plus = {} };
+                    prefixModifier(patt, j, RegOp{ .plus = {} });
                 }
             },
             '|' => {
