@@ -65,6 +65,7 @@
         "build.zig",
         "build.zig.zon",
         "src",
+        ".gitignore",
         // For example...
         //"LICENSE",
         //"README.md",
