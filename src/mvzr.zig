@@ -151,8 +151,8 @@ fn matchPatternNoAlts(patt: []const RegOp, sets: *const CharSets, haystack: []co
             .not_whitespace,
             .char,
             => matchOne(patt[j], sets, haystack[i]),
-            .star => matchStar(patt[1..], sets, haystack[i..]),
-            .plus => matchPlus(patt[1..], sets, haystack[i..]),
+            .star => matchStar(patt[j + 1 ..], sets, haystack[i..]),
+            .plus => matchPlus(patt[j + 1 ..], sets, haystack[i..]),
             else => stub: {
                 std.debug.print("cant match {s}\n", .{@tagName(patt[j])});
                 break :stub Match{ .j = 1, .i = 1 };
@@ -164,9 +164,10 @@ fn matchPatternNoAlts(patt: []const RegOp, sets: *const CharSets, haystack: []co
             assert(!(i > haystack.len));
             if (i == haystack.len) break;
         } else {
+            if (i == haystack.len) break;
             return null;
         }
-    }
+    } // TODO check that we finished the pattern!
     return i;
 }
 
@@ -195,7 +196,9 @@ fn matchOne(op: RegOp, sets: *const CharSets, c: u8) ?Match {
 
 fn matchStar(patt: []const RegOp, sets: *const CharSets, haystack: []const u8) ?Match {
     var i: usize = 0;
-    while (matchPattern(patt, sets, haystack[i..])) |m| {
+    const this_patt = thisPattern(patt);
+
+    while (matchPattern(this_patt, sets, haystack[i..])) |m| {
         i += m;
         assert(!(i > haystack.len));
         if (i == haystack.len) break;
@@ -204,7 +207,8 @@ fn matchStar(patt: []const RegOp, sets: *const CharSets, haystack: []const u8) ?
 }
 
 fn matchPlus(patt: []const RegOp, sets: *const CharSets, haystack: []const u8) ?Match {
-    const first_m = matchPattern(patt, sets, haystack);
+    const this_patt = thisPattern(patt);
+    const first_m = matchPattern(this_patt, sets, haystack);
     if (first_m == null) return null;
     const i = first_m.?;
     if (i == haystack.len) return Match{ .i = i, .j = nextPattern(patt) };
@@ -230,6 +234,13 @@ fn matchFourPatterns(
         return m1;
     } else {
         return matchThreePatterns(second, third, fourth, sets, haystack);
+    }
+}
+
+fn thisPattern(patt: []const RegOp) []const RegOp {
+    switch (patt[0]) {
+        .left => @panic("NYI"),
+        else => return patt[0..1],
     }
 }
 
@@ -772,4 +783,8 @@ test "match some things" {
     try testMatchAll("a*", "aaaaa", true);
     try testMatchAll("\\w+", "abdcdFG", true);
     try testFail("a+", "b");
+}
+
+test "workshop" {
+    try testMatchAll("a*b+", "aaaaabbbbbbbb", true);
 }
