@@ -1,5 +1,6 @@
 //!
 //! mvzr: Minimum Viable Zig Regex
+//!
 //! A minimalistic, but y'know, viable, Zig regex library.
 //!
 //! Focused on basic support of runtime-provided regular expressions.
@@ -166,11 +167,13 @@ fn matchPatternNoAlts(patt: []const RegOp, sets: *const CharSets, haystack: []co
             assert(!(i > haystack.len));
             if (i == haystack.len) break;
         } else {
-            if (i == haystack.len) break;
             return null;
         }
     } // TODO check that we finished the pattern!
-    return i;
+    if (j == patt.len or patt[j] == .unused)
+        return i
+    else
+        return null;
 }
 
 const ascii = std.ascii;
@@ -208,7 +211,7 @@ fn matchStar(patt: []const RegOp, sets: *const CharSets, haystack: []const u8) ?
         assert(!(i > haystack.len));
         if (i == haystack.len) break;
     }
-    return Match{ .i = i, .j = nextPattern(patt) };
+    return Match{ .i = i, .j = 1 + nextPattern(patt) };
 }
 
 fn matchPlus(patt: []const RegOp, sets: *const CharSets, haystack: []const u8) ?Match {
@@ -220,12 +223,12 @@ fn matchPlus(patt: []const RegOp, sets: *const CharSets, haystack: []const u8) ?
     const first_m = match_fn(this_patt, sets, haystack);
     if (first_m == null) return null;
     const i = first_m.?;
-    if (i == haystack.len) return Match{ .i = i, .j = nextPattern(patt) };
+    if (i == haystack.len) return Match{ .i = i, .j = 1 + nextPattern(patt) };
     const rest = matchStar(patt, sets, haystack[i..]);
     if (rest) |m| {
         return Match{ .i = i + m.i, .j = m.j };
     } else {
-        return Match{ .i = i, .j = nextPattern(patt) };
+        return Match{ .i = i, .j = 1 + nextPattern(patt) };
     }
 }
 
@@ -237,9 +240,9 @@ fn matchOptional(patt: []const RegOp, sets: *const CharSets, haystack: []const u
         &matchPatternNoAlts;
     const maybe_m = match_fn(this_patt, sets, haystack);
     if (maybe_m) |m| {
-        return Match{ .i = m, .j = nextPattern(patt) };
+        return Match{ .i = m, .j = 1 + nextPattern(patt) };
     } else {
-        return Match{ .i = 0, .j = nextPattern(patt) };
+        return Match{ .i = 0, .j = 1 + nextPattern(patt) };
     }
 }
 
@@ -249,13 +252,11 @@ fn matchLazyStar(patt: []const RegOp, sets: *const CharSets, haystack: []const u
         &matchPattern
     else
         &matchPatternNoAlts;
-    printPattern(this_patt);
     group, const next_patt = thisPattern(patt[this_patt.len..]);
     const next_fn = if (group)
         &matchPattern
     else
         &matchPatternNoAlts;
-    printPattern(next_patt);
     var i: usize = 0;
     while (true) {
         const maybe = match_fn(this_patt, sets, haystack[i..]);
@@ -263,17 +264,17 @@ fn matchLazyStar(patt: []const RegOp, sets: *const CharSets, haystack: []const u
             // let the other guy have some
             i += m1;
             if (i == haystack.len)
-                return Match{ .i = i, .j = nextPattern(patt) };
+                return Match{ .i = i, .j = 1 + nextPattern(patt) };
             const m_next = next_fn(next_patt, sets, haystack[i..]);
             if (m_next) |m2| {
                 // done
                 i += m2;
                 // skip our lazy star and our matcher
-                return Match{ .i = i, .j = this_patt.len + nextPattern(patt[this_patt.len..]) };
+                return Match{ .i = i, .j = this_patt.len + 1 + nextPattern(patt[this_patt.len..]) };
             }
         } else {
             // other guy's turn coming up
-            return Match{ .i = i, .j = nextPattern(patt) };
+            return Match{ .i = i, .j = 1 + nextPattern(patt) };
         }
     }
 }
@@ -839,19 +840,27 @@ test "compile some things" {
     // printRegex(&some_ranges);
 }
 
-fn testMatchAll(needle: []const u8, haystack: []const u8, print: bool) !void {
+fn testMatchAll(needle: []const u8, haystack: []const u8) !void {
     const maybe_regex = compile(needle);
     if (maybe_regex) |regex| {
-        if (print)
-            printRegex(&regex);
         const maybe_match = regex.match(haystack);
         if (maybe_match) |m| {
             try expectEqual(0, m[0]);
             try expectEqual(haystack.len, m[1]);
+        } else {
+            try expect(false);
         }
     } else {
         try std.testing.expect(false);
     }
+}
+
+fn testMatchAllP(needle: []const u8, haystack: []const u8) !void {
+    const maybe_regex = compile(needle);
+    if (maybe_regex) |regex| {
+        printRegex(&regex);
+    }
+    try testMatchAll(needle, haystack);
 }
 
 fn testFail(needle: []const u8, haystack: []const u8) !void {
@@ -864,19 +873,18 @@ fn testFail(needle: []const u8, haystack: []const u8) !void {
 }
 
 test "match some things" {
-    try testMatchAll("abc", "abc", false);
-    try testMatchAll("[a-z]", "d", false);
-    try testMatchAll("\\W\\w", "3a", false);
-    try testMatchAll("a*", "aaaaa", true);
-    try testMatchAll("\\w+", "abdcdFG", false);
+    try testMatchAll("abc", "abc");
+    try testMatchAll("[a-z]", "d");
+    try testMatchAll("\\W\\w", "3a");
+    try testMatchAll("\\w+", "abdcdFG");
+    try testMatchAll("a*b+", "aaaaabbbbbbbb");
+    try testMatchAll("a?b*", "abbbbb");
+    try testMatchAll("a?b*", "bbbbbb");
+    try testMatchAll("a*", "aaaaa");
     try testFail("a+", "b");
-    try testMatchAll("a*b+", "aaaaabbbbbbbb", false);
-    try testMatchAll("a?b*", "abbbbb", false);
-    try testMatchAll("a?b*", "bbbbbb", false);
+    try testMatchAll("^\\w*?abc", "qqqqabc");
+    // Fail if pattern isn't complete
+    try testFail("^\\w*?abcd", "qqqqabc");
 }
 
-test "workshop" {
-    //const lazy = compile("a*?b").?;
-    // printRegex(&lazy);
-    try testMatchAll("^\\w*?abc", "qqqqabc", true);
-}
+test "workshop" {}
