@@ -152,6 +152,7 @@ fn matchPatternNoAlts(patt: []const RegOp, sets: *const CharSets, haystack: []co
             .char,
             => matchOne(patt[j], sets, haystack[i]),
             .star => matchStar(patt[1..], sets, haystack[i..]),
+            .plus => matchPlus(patt[1..], sets, haystack[i..]),
             else => stub: {
                 std.debug.print("cant match {s}\n", .{@tagName(patt[j])});
                 break :stub Match{ .j = 1, .i = 1 };
@@ -200,6 +201,19 @@ fn matchStar(patt: []const RegOp, sets: *const CharSets, haystack: []const u8) ?
         if (i == haystack.len) break;
     }
     return Match{ .i = i, .j = nextPattern(patt) };
+}
+
+fn matchPlus(patt: []const RegOp, sets: *const CharSets, haystack: []const u8) ?Match {
+    const first_m = matchPattern(patt, sets, haystack);
+    if (first_m == null) return null;
+    const i = first_m.?;
+    if (i == haystack.len) return Match{ .i = i, .j = nextPattern(patt) };
+    const rest = matchStar(patt, sets, haystack[i..]);
+    if (rest) |m| {
+        return Match{ .i = i + m.i, .j = m.j };
+    } else {
+        return Match{ .i = i, .j = nextPattern(patt) };
+    }
 }
 
 // TODO this backtracks, maybe rethink that (lockstep is annoying)
@@ -742,9 +756,20 @@ fn testMatchAll(needle: []const u8, haystack: []const u8, print: bool) !void {
     }
 }
 
+fn testFail(needle: []const u8, haystack: []const u8) !void {
+    const maybe_regex = compile(needle);
+    if (maybe_regex) |regex| {
+        try expectEqual(null, regex.match(haystack));
+    } else {
+        try std.testing.expect(false);
+    }
+}
+
 test "match some things" {
     try testMatchAll("abc", "abc", false);
     try testMatchAll("[a-z]", "d", false);
     try testMatchAll("\\W\\w", "3a", false);
     try testMatchAll("a*", "aaaaa", true);
+    try testMatchAll("\\w+", "abdcdFG", true);
+    try testFail("a+", "b");
 }
