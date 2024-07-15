@@ -72,7 +72,12 @@ pub const CharSet = struct {
     hi: u64 = 0,
 };
 
-const CharSets = []const CharSet;
+const Match = struct {
+    j: usize,
+    i: usize,
+};
+
+const CharSets = [MAX_CHAR_SETS]CharSet;
 
 const Regex = struct {
     patt: [MAX_REGEX_OPS]RegOp = [1]RegOp{undefined} ** MAX_REGEX_OPS,
@@ -81,20 +86,21 @@ const Regex = struct {
     /// Match a regex pattern in `haystack`, if found, this returns `.{start, end}`
     pub fn match(regex: *const Regex, haystack: []const u8) ?struct { usize, usize } {
         if (haystack.len == 0) return null;
-        var matchlen: usize = 0;
-        const set_ptr = &regex.sets;
-        switch (regex.out[0].kind) {
+        // const set_ptr = regex.sets[0..];
+        const patt = regex.patt;
+        switch (patt[0]) {
             .begin => {
-                const width = matchPattern(regex[0..], set_ptr, matchlen, haystack);
+                const width = matchPattern(patt[1..], &regex.sets, 0, haystack);
                 if (width) |w| {
                     return .{ 0, w };
                 } else return null;
             },
             else => {
+                var matchlen: usize = 0;
                 while (matchlen < haystack.len) : (matchlen += 1) {
-                    const width = matchPattern(regex[1..], set_ptr, matchlen, haystack);
-                    if (width) {
-                        return .{ matchlen, matchlen + width };
+                    const width = matchPattern(&patt, &regex.sets, matchlen, haystack);
+                    if (width) |w| {
+                        return .{ matchlen, matchlen + w };
                     }
                 }
                 return null;
@@ -113,7 +119,7 @@ pub fn match(haystack: []const u8, pattern: []const u8) ?usize {
 }
 
 fn matchPattern(regex: []const RegOp, set: *const CharSets, i: usize, haystack: []const u8) ?usize {
-    var j = 0;
+    var j: usize = 0;
     if (XXX) {
         j += 1;
     }
@@ -129,28 +135,57 @@ fn matchPattern(regex: []const RegOp, set: *const CharSets, i: usize, haystack: 
     return matchPatternNoAlts(regex, set, i, haystack);
 }
 
-fn matchPatternNoAlts(regex: []const RegOp, set: *const CharSets, i: usize, haystack: []const u8) ?usize {
-    _ = regex; // autofix
-    _ = set; // autofix
-    _ = i; // autofix
-    _ = haystack; // autofix
+fn matchPatternNoAlts(patt: []const RegOp, sets: *const CharSets, i_in: usize, haystack: []const u8) ?usize {
+    var i = i_in;
+    var j: usize = 0;
+    while (j < patt.len and patt[j] != .unused) {
+        const maybe_match = switch (patt[j]) {
+            .dot,
+            .class,
+            .not_class,
+            .digit,
+            .not_digit,
+            .alpha,
+            .not_alpha,
+            .whitespace,
+            .not_whitespace,
+            .char,
+            => matchOne(patt[j], sets, haystack[i]),
+            else => stub: {
+                std.debug.print("cant match {s}\n", .{@tagName(patt[j])});
+                break :stub Match{ .j = 1, .i = 1 };
+            },
+        };
+        if (maybe_match) |m| {
+            j += m.j;
+            i += m.i;
+        } else {
+            return null;
+        }
+    }
+    return i;
 }
 
 const ascii = std.ascii;
 
-fn matchOne(op: RegOp, sets: *const CharSets, c: u8) bool {
-    switch (op) {
-        .dot => return true, // we match newlines, deal with it
-        .class => |c_off| return matchClass(sets[c_off], c),
-        .not_class => |c_off| return !matchClass(sets[c_off], c),
-        .digit => return ascii.isDigit(c),
-        .not_digit => return !ascii.isDigit(c),
-        .alpha => return ascii.isAlphabetic(c),
-        .not_alpha => return !ascii.isAlphabetic(c),
-        .whitespace => return ascii.isWhitespace(c),
-        .not_whitespace => return !ascii.isWhitespace(c),
-        .char => |ch| return (c == ch),
+fn matchOne(op: RegOp, sets: *const CharSets, c: u8) ?Match {
+    const matched = switch (op) {
+        .dot => true, // we match newlines, deal with it
+        .class => |c_off| matchClass(sets[c_off], c),
+        .not_class => |c_off| !matchClass(sets[c_off], c),
+        .digit => ascii.isDigit(c),
+        .not_digit => !ascii.isDigit(c),
+        .alpha => ascii.isAlphabetic(c),
+        .not_alpha => !ascii.isAlphabetic(c),
+        .whitespace => ascii.isWhitespace(c),
+        .not_whitespace => !ascii.isWhitespace(c),
+        .char => |ch| (c == ch),
         else => unreachable,
+    };
+    if (matched) {
+        return Match{ .j = 1, .i = 1 };
+    } else {
+        return null;
     }
 }
 
@@ -204,7 +239,7 @@ fn matchTwoPatterns(
 }
 
 fn sliceAlt(regex: []const RegOp) []const RegOp {
-    const alt_at = findAlt(regex);
+    const alt_at = findAlt(regex, 0);
     if (alt_at) |at| {
         return regex[0..at];
     } else unreachable; // verified before dispatch
@@ -246,7 +281,7 @@ fn matchClass(set: CharSet, c: u8) bool {
 }
 
 // Count alts which aren't in a group
-fn countAlt(patt: []RegOp) usize {
+fn countAlt(patt: []const RegOp) usize {
     var pump: usize = 0;
     var alts: usize = 0;
     for (patt) |op| {
@@ -268,9 +303,10 @@ fn countAlt(patt: []RegOp) usize {
     return alts;
 }
 
-fn findAlt(patt: []const RegOp, j: usize) ?usize {
+fn findAlt(patt: []const RegOp, j_in: usize) ?usize {
+    var j = j_in;
     while (j < patt.len) : (j += 1) {
-        if (patt[j].kind == .alt) {
+        if (patt[j] == .alt) {
             return j;
         }
     }
@@ -663,4 +699,11 @@ test "compile some things" {
     printRegex(&some_alts);
     const some_ranges = compile("[a-z][^a-z][abc^-]").?;
     printRegex(&some_ranges);
+}
+
+test "match some things" {
+    const abc = compile("abc").?;
+    printRegex(&abc);
+    const start, const end = abc.match("abc").?;
+    std.debug.print("matched from {d} to {d}, '{s}'\n", .{ start, end, ("abc")[start..end] });
 }
