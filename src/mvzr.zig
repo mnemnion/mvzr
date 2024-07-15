@@ -444,6 +444,7 @@ pub fn compile(in: []const u8) ?Regex {
                             // Others are accepted as escaped, we don't care
                             // if they're special, you're not special, you're
                             // not my dad, you get the regex you give
+                            // TODO ok fine, we need to handle like, \n here
                             patt[j] = RegOp{ .char = ch };
                         },
                     }
@@ -459,8 +460,8 @@ pub fn compile(in: []const u8) ?Regex {
                         break :which RegOp{ .not_class = s };
                     } else break :which RegOp{ .class = s };
                 };
-
-                while (in[i] != ']' and i < in.len) : (i += 1) {
+                i += 1;
+                while (i < in.len and in[i] != ']') : (i += 1) {
                     if (s > sets.len) {
                         logError("excessive number of character sets\n", .{});
                         bad_string = true;
@@ -511,30 +512,36 @@ pub fn compile(in: []const u8) ?Regex {
                             const c_end = which: {
                                 if (in[i + 2] != '\\') {
                                     i += 1; // we get one from the while loop
-                                    break :which in[i + 2];
+                                    break :which in[i + 1];
                                 } else if (i + 3 < in.len) {
                                     i += 2; // likewise
-                                    break :which in[i + 3];
+                                    break :which in[i + 2];
                                 } else {
                                     // what to do here? don't care, have a 0
                                     break :which 0; // that'll show ya
                                 }
                             };
-                            for (c1..c_end) |c_range| {
-                                switch (c_range) {
-                                    0...63 => {
-                                        const cut_c: u6 = @truncate(c_range);
-                                        low |= one << cut_c;
-                                    },
-                                    64...127 => {
-                                        const cut_c: u6 = @truncate(c_range);
-                                        hi |= one << cut_c;
-                                    },
-                                    else => {
-                                        bad_string = true;
-                                        break :dispatch;
-                                    },
+                            std.debug.print("c_end: {u}\n", .{c_end});
+                            if (c1 < c_end + 1) {
+                                for (c1..c_end + 1) |c_range| {
+                                    switch (c_range) {
+                                        0...63 => {
+                                            const cut_c: u6 = @truncate(c_range);
+                                            low |= one << cut_c;
+                                        },
+                                        64...127 => {
+                                            const cut_c: u6 = @truncate(c_range);
+                                            hi |= one << cut_c;
+                                        },
+                                        else => {
+                                            bad_string = true;
+                                            break :dispatch;
+                                        },
+                                    }
                                 }
+                            } else {
+                                bad_string = true;
+                                break :dispatch;
                             }
                         } else { // '-' in set, value is 45 so
                             const cut_hyphen: u6 = @truncate('-');
@@ -584,34 +591,76 @@ fn logError(comptime fmt: []const u8, args: anytype) void {
     }
 }
 
-fn printRegex(regex: []const RegOp) void {
+fn printRegex(regex: *const Regex) void {
     var j: usize = 0;
+    var set_max: ?u8 = null;
     std.debug.print("[", .{});
-    while (j < regex.len and regex[j] != .unused) : (j += 1) {
-        switch (regex[j]) {
+    const patt = regex.patt;
+    while (j < patt.len and patt[j] != .unused) : (j += 1) {
+        switch (patt[j]) {
             .char,
             => |op| {
-                std.debug.print("{s} {u}", .{ @tagName(regex[j]), op });
+                std.debug.print("{s} {u}", .{ @tagName(patt[j]), op });
             },
             .class,
             .not_class,
             => |op| {
-                std.debug.print("{s} {d}", .{ @tagName(regex[j]), op });
+                if (set_max) |max| {
+                    set_max = @max(max, op);
+                } else {
+                    set_max = op;
+                }
+                std.debug.print("{s} {d}", .{ @tagName(patt[j]), op });
             },
             else => {
-                std.debug.print("{s}", .{@tagName(regex[j])});
+                std.debug.print("{s}", .{@tagName(patt[j])});
             },
         }
-        if (j + 1 < regex.len and regex[j + 1] != .unused) {
+        if (j + 1 < patt.len and patt[j + 1] != .unused) {
             std.debug.print(", ", .{});
         }
     }
     std.debug.print("]\n", .{});
+    if (set_max) |max| {
+        for (0..max + 1) |i| {
+            std.debug.print("set {d}: ", .{i});
+            printCharSet(regex.sets[i]) catch unreachable;
+        }
+    }
+}
+
+fn printCharSet(set: CharSet) !void {
+    const allocator = std.testing.allocator;
+    var set_str = try std.ArrayList(u8).initCapacity(allocator, @popCount(set.low) + @popCount(set.hi) + 1);
+    defer set_str.deinit();
+    if (@popCount(set.low) != 0) {
+        for (0..64) |i| {
+            const c: u6 = @intCast(i);
+            if ((set.low | (one << c)) == set.low) {
+                try set_str.append(@as(u8, c));
+            }
+        }
+    }
+    if (@popCount(set.hi) != 0) {
+        try set_str.append(' ');
+        for (0..64) |i| {
+            const c: u6 = @intCast(i);
+            if ((set.hi | (one << c)) == set.hi) {
+                const ch = @as(u8, c) | 0b0100_0000;
+                try set_str.append(ch);
+            }
+        }
+    }
+    std.debug.print("{s}\n", .{set_str.items});
 }
 
 test "compile some things" {
     const a_star = compile("a*").?;
-    printRegex(&a_star.patt);
+    printRegex(&a_star);
     const a_group = compile("(abc)*").?;
-    printRegex(&a_group.patt);
+    printRegex(&a_group);
+    const some_alts = compile("a|\\w+|2?").?;
+    printRegex(&some_alts);
+    const some_ranges = compile("[a-z][^a-z][abc^-]").?;
+    printRegex(&some_ranges);
 }
