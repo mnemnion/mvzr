@@ -130,7 +130,7 @@ fn matchPattern(regex: []const RegOp, set: *const CharSets, haystack: []const u8
             1 => return dispatchTwoAlts(regex, set, haystack),
             2 => return dispatchThreeAlts(regex, set, haystack),
             3 => return dispatchFourAlts(regex, set, haystack),
-            else => @panic("NYI"),
+            else => return dispatchMoreAlts(regex, set, haystack),
         }
     }
     return matchPatternNoAlts(regex, set, haystack);
@@ -411,25 +411,37 @@ fn sliceGroup(patt: []const RegOp) []const RegOp {
     unreachable;
 }
 
-fn dispatchTwoAlts(regex: []const RegOp, set: *const CharSets, haystack: []const u8) ?usize {
-    const first = sliceAlt(regex);
-    const second = regex[first.len + 1 ..];
-    return matchTwoPatterns(first, second, set, haystack);
+fn dispatchTwoAlts(patt: []const RegOp, sets: *const CharSets, haystack: []const u8) ?usize {
+    const first = sliceAlt(patt);
+    const second = patt[first.len + 1 ..];
+    return matchTwoPatterns(first, second, sets, haystack);
 }
 
-fn dispatchThreeAlts(regex: []const RegOp, set: *const CharSets, haystack: []const u8) ?usize {
-    const first = sliceAlt(regex);
-    const second = sliceAlt(regex[first.len + 1 ..]);
-    const third = regex[second.len + 1 ..];
-    return matchThreePatterns(first, second, third, set, haystack);
+fn dispatchThreeAlts(patt: []const RegOp, sets: *const CharSets, haystack: []const u8) ?usize {
+    const first = sliceAlt(patt);
+    const second = sliceAlt(patt[first.len + 1 ..]);
+    const third = patt[first.len + second.len + 2 ..];
+    return matchThreePatterns(first, second, third, sets, haystack);
 }
 
-fn dispatchFourAlts(regex: []const RegOp, set: *const CharSets, haystack: []const u8) ?usize {
-    const first = sliceAlt(regex);
-    const second = sliceAlt(regex[first.len + 1 ..]);
-    const third = sliceAlt(regex[second.len + 1 ..]);
-    const fourth = regex[second.len + 1 ..];
-    return matchFourPatterns(first, second, third, fourth, set, haystack);
+fn dispatchFourAlts(patt: []const RegOp, sets: *const CharSets, haystack: []const u8) ?usize {
+    const first = sliceAlt(patt);
+    const second = sliceAlt(patt[first.len + 1 ..]);
+    const third = sliceAlt(patt[first.len + second.len + 2 ..]);
+    const fourth = patt[first.len + second.len + third.len + 3 ..];
+    return matchFourPatterns(first, second, third, fourth, sets, haystack);
+}
+
+fn dispatchMoreAlts(patt: []const RegOp, sets: *const CharSets, haystack: []const u8) ?usize {
+    const first = sliceAlt(patt);
+    const second = sliceAlt(patt[first.len + 1 ..]);
+    const third = sliceAlt(patt[first.len + second.len + 2 ..]);
+    const maybe_m = matchThreePatterns(first, second, third, sets, haystack);
+    if (maybe_m) |m| {
+        return m;
+    } else {
+        return matchPattern(patt[first.len + second.len + third.len + 3 ..], sets, haystack);
+    }
 }
 
 fn matchClass(set: CharSet, c: u8) bool {
@@ -944,6 +956,11 @@ test "match some things" {
     try testMatchAll("[^abc]+", "defgh");
     try testMatchAll("^1??1abc$", "1abc");
     try testFail("^1??1abc$", "1abccc");
+    try testMatchAll("foo|bar|baz", "foo");
+    try testMatchAll("foo|bar|baz", "bar");
+    try testMatchAll("foo|bar|baz", "baz");
+    try testMatchAll("foo|bar|baz|quux+", "quuxxxxx");
+    try testMatchAll("foo|bar|baz|bux|quux|quuux|quuuux", "quuuux");
 }
 
 test "workshop" {
