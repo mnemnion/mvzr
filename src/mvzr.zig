@@ -158,6 +158,7 @@ fn matchPatternNoAlts(patt: []const RegOp, sets: *const CharSets, haystack: []co
             .lazy_star => matchLazyStar(patt[j + 1 ..], sets, haystack[i..]),
             .lazy_plus => matchLazyPlus(patt[j + 1 ..], sets, haystack[i..]),
             .lazy_optional => matchLazyOptional(patt[j + 1 ..], sets, haystack[i..]),
+            .end => matchEnd(i, haystack),
             else => stub: {
                 std.debug.print("cant match {s}\n", .{@tagName(patt[j])});
                 break :stub Match{ .j = 1, .i = 1 };
@@ -196,6 +197,14 @@ fn matchOne(op: RegOp, sets: *const CharSets, c: u8) ?Match {
     };
     if (matched) {
         return Match{ .j = 1, .i = 1 };
+    } else {
+        return null;
+    }
+}
+
+fn matchEnd(i: usize, haystack: []const u8) ?Match {
+    if (i + 1 == haystack.len) {
+        return Match{ .i = 1, .j = 1 };
     } else {
         return null;
     }
@@ -262,7 +271,7 @@ fn matchLazyStar(patt: []const RegOp, sets: *const CharSets, haystack: []const u
     // Other guy gets the first shot
     const m_init = next_fn(next_patt, sets, haystack);
     if (m_init) |m| {
-        return Match{ .i = m, .j = 1 + next_patt.len };
+        return Match{ .i = m, .j = 1 + this_patt.len + pattEnd(next_patt) };
     }
     var i: usize = 0;
     while (true) {
@@ -277,7 +286,7 @@ fn matchLazyStar(patt: []const RegOp, sets: *const CharSets, haystack: []const u
                 // done
                 i += m2;
                 // skip our lazy star and our matcher
-                return Match{ .i = i, .j = 1 + next_patt.len };
+                return Match{ .i = i, .j = 1 + this_patt.len + pattEnd(next_patt) };
             }
         } else {
             // other guy's turn coming up
@@ -309,7 +318,7 @@ fn matchLazyOptional(patt: []const RegOp, sets: *const CharSets, haystack: []con
     // try the rest first
     const maybe_match = matchPattern(patt[this_patt.len..], sets, haystack);
     if (maybe_match) |m| {
-        return Match{ .i = m, .j = 1 + this_patt.len + patt.len };
+        return Match{ .i = m, .j = 1 + pattEnd(patt) };
     }
     return matchOptional(patt, sets, haystack);
 }
@@ -336,6 +345,12 @@ fn thisPattern(patt: []const RegOp) struct { bool, []const RegOp } {
         .left => return .{ true, sliceGroup(patt) },
         else => return .{ false, patt[0..1] },
     }
+}
+
+fn pattEnd(patt: []const RegOp) usize {
+    var j: usize = 0;
+    while (j < patt.len and patt[j] != .unused) : (j += 1) {}
+    return j;
 }
 
 fn matchThreePatterns(
@@ -927,5 +942,7 @@ test "match some things" {
 }
 
 test "workshop" {
+    try testMatchAll("^1??1abc", "1abc");
+    // try testFail("^1??1abc$", "1abccc");
     //
 }
