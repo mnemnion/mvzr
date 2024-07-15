@@ -322,7 +322,7 @@ fn prefixModifier(patt: *[MAX_REGEX_OPS]RegOp, j: usize, op: RegOp) void {
 }
 
 fn beforePriorLeft(patt: *const [MAX_REGEX_OPS]RegOp, j: usize) usize {
-    std.debug.assert(patt[j] == .left);
+    std.debug.assert(patt[j] == .right);
     var find_j = j - 1;
     var pump: usize = 0;
     while (find_j != 0) : (find_j -= 1) {
@@ -584,6 +584,34 @@ fn logError(comptime fmt: []const u8, args: anytype) void {
     }
 }
 
+fn printRegex(regex: []const RegOp) void {
+    var j: usize = 0;
+    std.debug.print("[", .{});
+    while (j < regex.len and regex[j] != .unused) : (j += 1) {
+        switch (regex[j]) {
+            .char,
+            => |op| {
+                std.debug.print("{s} {u}", .{ @tagName(regex[j]), op });
+            },
+            .class,
+            .not_class,
+            => |op| {
+                std.debug.print("{s} {d}", .{ @tagName(regex[j]), op });
+            },
+            else => {
+                std.debug.print("{s}", .{@tagName(regex[j])});
+            },
+        }
+        if (j + 1 < regex.len and regex[j + 1] != .unused) {
+            std.debug.print(", ", .{});
+        }
+    }
+    std.debug.print("]\n", .{});
+}
+
 test "compile some things" {
-    _ = compile("a*");
+    const a_star = compile("a*").?;
+    printRegex(&a_star.patt);
+    const a_group = compile("(abc)*").?;
+    printRegex(&a_group.patt);
 }
