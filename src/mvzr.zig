@@ -1,5 +1,5 @@
-//! mvzr: Minimum Viable Zig Regex
 //!
+//! mvzr: Minimum Viable Zig Regex
 //! A minimalistic, but y'know, viable, Zig regex library.
 //!
 //! Focused on basic support of runtime-provided regular expressions.
@@ -249,11 +249,13 @@ fn matchLazyStar(patt: []const RegOp, sets: *const CharSets, haystack: []const u
         &matchPattern
     else
         &matchPatternNoAlts;
+    printPattern(this_patt);
     group, const next_patt = thisPattern(patt[this_patt.len..]);
     const next_fn = if (group)
         &matchPattern
     else
         &matchPatternNoAlts;
+    printPattern(next_patt);
     var i: usize = 0;
     while (true) {
         const maybe = match_fn(this_patt, sets, haystack[i..]);
@@ -267,7 +269,7 @@ fn matchLazyStar(patt: []const RegOp, sets: *const CharSets, haystack: []const u
                 // done
                 i += m2;
                 // skip our lazy star and our matcher
-                return Match{ .i = i, .j = nextPattern(patt[this_patt.len..]) };
+                return Match{ .i = i, .j = this_patt.len + nextPattern(patt[this_patt.len..]) };
             }
         } else {
             // other guy's turn coming up
@@ -750,11 +752,25 @@ fn logError(comptime fmt: []const u8, args: anytype) void {
 const expect = std.testing.expect;
 const expectEqual = std.testing.expectEqual;
 
+fn printPattern(patt: []const RegOp) void {
+    _ = printPatternInternal(patt);
+}
+
 fn printRegex(regex: *const Regex) void {
+    const patt = regex.patt;
+    const set_max = printPatternInternal(&patt);
+    if (set_max) |max| {
+        for (0..max + 1) |i| {
+            std.debug.print("set {d}: ", .{i});
+            printCharSet(regex.sets[i]) catch unreachable;
+        }
+    }
+}
+
+fn printPatternInternal(patt: []const RegOp) ?u8 {
     var j: usize = 0;
     var set_max: ?u8 = null;
     std.debug.print("[", .{});
-    const patt = regex.patt;
     while (j < patt.len and patt[j] != .unused) : (j += 1) {
         switch (patt[j]) {
             .char,
@@ -780,12 +796,7 @@ fn printRegex(regex: *const Regex) void {
         }
     }
     std.debug.print("]\n", .{});
-    if (set_max) |max| {
-        for (0..max + 1) |i| {
-            std.debug.print("set {d}: ", .{i});
-            printCharSet(regex.sets[i]) catch unreachable;
-        }
-    }
+    return set_max;
 }
 
 fn printCharSet(set: CharSet) !void {
@@ -862,10 +873,10 @@ test "match some things" {
     try testMatchAll("a*b+", "aaaaabbbbbbbb", false);
     try testMatchAll("a?b*", "abbbbb", false);
     try testMatchAll("a?b*", "bbbbbb", false);
-    try testMatchAll("^\\w*?abc", "qqqqabc", false);
 }
 
 test "workshop" {
-    const lazy = compile("a*?b").?;
-    printRegex(&lazy);
+    //const lazy = compile("a*?b").?;
+    // printRegex(&lazy);
+    try testMatchAll("^\\w*?abc", "qqqqabc", true);
 }
