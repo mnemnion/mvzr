@@ -8,9 +8,12 @@ const testing = std.testing;
 
 const XXX = false;
 
-/// Maximum regex operations
+// Zig is very particular about the types of shifts.
+const one: u64 = 1;
+
+/// Maximum regex operations.
 pub const MAX_REGEX_OPS = 50;
-/// Maximum character sets, ASCII only
+/// Maximum character sets, ASCII only.
 pub const MAX_CHAR_SETS = 10;
 
 const RegexType = enum {
@@ -52,6 +55,7 @@ const Regex = struct {
     patt: [MAX_REGEX_OPS]RegOp,
     sets: [MAX_CHAR_SETS]CharSet,
 
+    /// Match a regex pattern in `haystack`, if found, this returns `.{start, end}`
     pub fn match(regex: *const Regex, haystack: []const u8) ?struct { usize, usize } {
         if (haystack.len == 0) return null;
         var matchlen: usize = 0;
@@ -127,11 +131,11 @@ fn matchClass(set: CharSet, c: u8) bool {
     switch (c) {
         0...63 => {
             const cut_c: u6 = @truncate(c);
-            return (set.low | (1 << cut_c)) == set.low;
+            return (set.low | (one << cut_c)) == set.low;
         },
         64...127 => {
             const cut_c: u6 = @truncate(c);
-            return (set.hi | (1 << cut_c)) == set.hi;
+            return (set.hi | (one << cut_c)) == set.hi;
         },
         else => return false,
     }
@@ -249,11 +253,11 @@ pub fn compile(in: []const u8) ?Regex {
                         switch (c1) {
                             0...63 => {
                                 const cut_c: u6 = @truncate(c1);
-                                low |= 1 << cut_c;
+                                low |= one << cut_c;
                             },
                             64...91, 93...127 => {
                                 const cut_c: u6 = @truncate(c1);
-                                hi |= 1 << cut_c;
+                                hi |= one << cut_c;
                             },
                             '\\' => { // escaped value, we don't care what
                                 // thought I had established that already but ok
@@ -263,11 +267,11 @@ pub fn compile(in: []const u8) ?Regex {
                                     switch (c2) {
                                         0...63 => {
                                             const cut_c: u6 = @truncate(c2);
-                                            low |= 1 << cut_c;
+                                            low |= one << cut_c;
                                         },
                                         64...127 => {
                                             const cut_c: u6 = @truncate(c2);
-                                            hi |= 1 << cut_c;
+                                            hi |= one << cut_c;
                                         },
                                         else => {
                                             bad_string = true;
@@ -300,11 +304,11 @@ pub fn compile(in: []const u8) ?Regex {
                                 switch (c_range) {
                                     0...63 => {
                                         const cut_c: u6 = @truncate(c_range);
-                                        low |= 1 << cut_c;
+                                        low |= one << cut_c;
                                     },
                                     64...127 => {
                                         const cut_c: u6 = @truncate(c_range);
-                                        hi |= 1 << cut_c;
+                                        hi |= one << cut_c;
                                     },
                                     else => {
                                         bad_string = true;
