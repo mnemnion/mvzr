@@ -5,7 +5,7 @@
 //! Focused on basic support of runtime-provided regular expressions.
 const std = @import("std");
 const builtin = @import("builtin");
-const testing = std.testing;
+const assert = std.debug.assert;
 
 const XXX = false;
 
@@ -160,6 +160,8 @@ fn matchPatternNoAlts(patt: []const RegOp, sets: *const CharSets, haystack: []co
         if (maybe_match) |m| {
             j += m.j;
             i += m.i;
+            assert(!(i > haystack.len));
+            if (i == haystack.len) break;
         } else {
             return null;
         }
@@ -191,9 +193,13 @@ fn matchOne(op: RegOp, sets: *const CharSets, c: u8) ?Match {
 }
 
 fn matchStar(patt: []const RegOp, sets: *const CharSets, haystack: []const u8) ?Match {
-    const maybe_match = matchPattern(patt, sets, haystack);
-    _ = maybe_match; // autofix
-    return null;
+    var i: usize = 0;
+    while (matchPattern(patt, sets, haystack[i..])) |m| {
+        i += m;
+        assert(!(i > haystack.len));
+        if (i == haystack.len) break;
+    }
+    return Match{ .i = i, .j = nextPattern(patt) };
 }
 
 // TODO this backtracks, maybe rethink that (lockstep is annoying)
@@ -284,6 +290,13 @@ fn matchClass(set: CharSet, c: u8) bool {
     }
 }
 
+fn nextPattern(patt: []const RegOp) usize {
+    switch (patt[0]) {
+        .left => return findRight(patt, 0) + 1,
+        else => return 1,
+    }
+}
+
 // Count alts which aren't in a group
 fn countAlt(patt: []const RegOp) usize {
     var pump: usize = 0;
@@ -317,16 +330,16 @@ fn findAlt(patt: []const RegOp, j_in: usize) ?usize {
     return null;
 }
 
-fn findRight(patt: *const []const RegOp, j: usize) usize {
+fn findRight(patt: []const RegOp, j_in: usize) usize {
     // Compiler made sure these are matched
-    var pump = 0;
+    var j = j_in;
+    var pump: usize = 0;
     while (j < patt.len) : (j += 1) {
-        const kind = patt[j].kind;
-        if (kind == .right and pump == 0)
+        if (patt[j] == .right and pump == 0)
             return j
         else
             continue;
-        if (kind == .left) pump += 1;
+        if (patt[j] == .left) pump += 1;
     }
     unreachable;
 }
@@ -732,5 +745,6 @@ fn testMatchAll(needle: []const u8, haystack: []const u8, print: bool) !void {
 test "match some things" {
     try testMatchAll("abc", "abc", false);
     try testMatchAll("[a-z]", "d", false);
-    try testMatchAll("\\W\\w", "3a", true);
+    try testMatchAll("\\W\\w", "3a", false);
+    try testMatchAll("a*", "aaaaa", true);
 }
