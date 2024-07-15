@@ -217,10 +217,28 @@ pub fn compile(in: []const u8) ?Regex {
                 patt[j] = RegOp{ .dot = {} };
             },
             '*' => {
-                patt[j] = RegOp{ .star = {} };
+                if (i + 1 < in.len and in[i + 1] == '?') {
+                    i += 1;
+                    patt[j] = RegOp{ .lazy_star = {} };
+                } else {
+                    patt[j] = RegOp{ .star = {} };
+                }
             },
             '?' => {
-                patt[j] = RegOp{ .optional = {} };
+                if (i + 1 < in.len and in[i + 1] == '?') {
+                    i += 1;
+                    patt[j] = RegOp{ .lazy_optional = {} };
+                } else {
+                    patt[j] = RegOp{ .optional = {} };
+                }
+            },
+            '+' => {
+                if (i + 1 < in.len and in[i + 1] == '?') {
+                    i += 1;
+                    patt[j] = RegOp{ .lazy_plus = {} };
+                } else {
+                    patt[j] = RegOp{ .plus = {} };
+                }
             },
             '|' => {
                 patt[j] = RegOp{ .alt = {} };
