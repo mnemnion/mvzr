@@ -153,6 +153,8 @@ fn matchPatternNoAlts(patt: []const RegOp, sets: *const CharSets, haystack: []co
             => matchOne(patt[j], sets, haystack[i]),
             .star => matchStar(patt[j + 1 ..], sets, haystack[i..]),
             .plus => matchPlus(patt[j + 1 ..], sets, haystack[i..]),
+            .optional => matchOptional(patt[j + 1 ..], sets, haystack[i..]),
+            .lazy_star => matchLazyStar(patt[j + 1 ..], sets, haystack[i..]),
             else => stub: {
                 std.debug.print("cant match {s}\n", .{@tagName(patt[j])});
                 break :stub Match{ .j = 1, .i = 1 };
@@ -224,6 +226,53 @@ fn matchPlus(patt: []const RegOp, sets: *const CharSets, haystack: []const u8) ?
         return Match{ .i = i + m.i, .j = m.j };
     } else {
         return Match{ .i = i, .j = nextPattern(patt) };
+    }
+}
+
+fn matchOptional(patt: []const RegOp, sets: *const CharSets, haystack: []const u8) ?Match {
+    const group, const this_patt = thisPattern(patt);
+    const match_fn = if (group)
+        &matchPattern
+    else
+        &matchPatternNoAlts;
+    const maybe_m = match_fn(this_patt, sets, haystack);
+    if (maybe_m) |m| {
+        return Match{ .i = m, .j = nextPattern(patt) };
+    } else {
+        return Match{ .i = 0, .j = nextPattern(patt) };
+    }
+}
+
+fn matchLazyStar(patt: []const RegOp, sets: *const CharSets, haystack: []const u8) ?Match {
+    var group, const this_patt = thisPattern(patt);
+    const match_fn = if (group)
+        &matchPattern
+    else
+        &matchPatternNoAlts;
+    group, const next_patt = thisPattern(patt[this_patt.len..]);
+    const next_fn = if (group)
+        &matchPattern
+    else
+        &matchPatternNoAlts;
+    var i: usize = 0;
+    while (true) {
+        const maybe = match_fn(this_patt, sets, haystack[i..]);
+        if (maybe) |m1| {
+            // let the other guy have some
+            i += m1;
+            if (i == haystack.len)
+                return Match{ .i = i, .j = nextPattern(patt) };
+            const m_next = next_fn(next_patt, sets, haystack[i..]);
+            if (m_next) |m2| {
+                // done
+                i += m2;
+                // skip our lazy star and our matcher
+                return Match{ .i = i, .j = nextPattern(patt[this_patt.len..]) };
+            }
+        } else {
+            // other guy's turn coming up
+            return Match{ .i = i, .j = nextPattern(patt) };
+        }
     }
 }
 
@@ -471,10 +520,10 @@ pub fn compile(in: []const u8) ?Regex {
     }) {
         const c = in[i];
         switch (c) {
-            '^' => {
+            '$' => {
                 patt[j] = RegOp{ .end = {} };
             },
-            '$' => {
+            '^' => {
                 patt[j] = RegOp{ .begin = {} };
             },
             '.' => {
@@ -808,10 +857,15 @@ test "match some things" {
     try testMatchAll("[a-z]", "d", false);
     try testMatchAll("\\W\\w", "3a", false);
     try testMatchAll("a*", "aaaaa", true);
-    try testMatchAll("\\w+", "abdcdFG", true);
+    try testMatchAll("\\w+", "abdcdFG", false);
     try testFail("a+", "b");
+    try testMatchAll("a*b+", "aaaaabbbbbbbb", false);
+    try testMatchAll("a?b*", "abbbbb", false);
+    try testMatchAll("a?b*", "bbbbbb", false);
+    try testMatchAll("^\\w*?abc", "qqqqabc", false);
 }
 
 test "workshop" {
-    try testMatchAll("a*b+", "aaaaabbbbbbbb", true);
+    const lazy = compile("a*?b").?;
+    printRegex(&lazy);
 }
