@@ -193,8 +193,8 @@ fn matchOne(op: RegOp, sets: *const CharSets, c: u8) ?Match {
     }
 }
 
-// TODO I think this is just `return false`, it
-// shouldn't ever trigger
+// TODO I think this is just `return null`, it
+// shouldn't ever trigger for genuine end states
 fn matchEnd(i: usize, haystack: []const u8) ?Match {
     if (i == haystack.len) {
         return Match{ .i = 0, .j = 1 };
