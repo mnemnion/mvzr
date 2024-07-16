@@ -33,9 +33,14 @@ As long as you color within the lines, it should be fine.
 ## Interface
 
 ```zig
-const regex = mvzr.compile(patt_str);
-const first, const last = regex.match(haystack).?;
-const first2, const last2 = match(haystack, patt_str).?;
+const regex: mvzr.Regex = mvzr.compile(patt_str).?;
+const match: mvzr.Match = regex.match(haystack).?;
+const match2: mvzr.Match = match(haystack, patt_str).?;
+const iter: mvzr.RegexIterator = regex.iterator(haystack);
+
+while (iter.next()) |m| {
+    // ...
+}
 ```
 
 ## Bugs

@@ -101,6 +101,7 @@ const Regex = struct {
         }
     }
 
+    /// Boolean test if the regex matches in the haystack.
     pub fn isMatch(regex: *const Regex, haystack: []const u8) bool {
         const maybe_matched = regex.matchInternal(haystack);
         if (maybe_matched) |_| {
@@ -497,6 +498,19 @@ fn matchClass(set: CharSet, c: u8) bool {
 fn nextPattern(patt: []const RegOp) usize {
     switch (patt[0]) {
         .left => return findRight(patt, 0) + 1,
+        .star,
+        .optional,
+        .plus,
+        .lazy_star,
+        .lazy_optional,
+        .lazy_plus,
+        // XXX:
+        // .eager_star,
+        // .eager_plus,
+        // .. is eager optional a thing?
+        // .at_least,
+        // .up_to,
+        => return 1 + nextPattern(patt[1..]),
         else => return 1,
     }
 }
@@ -1078,8 +1092,7 @@ test "match some things" {
 
 test "workshop" {
     //
-    const regex_finder_string = "<\\^.+?\\$>";
-    printRegex(&compile(regex_finder_string).?);
+    try testMatchAll("a*aaa", "aaaaaaaaaaaaaa");
 }
 
 test "iteration" {
