@@ -296,7 +296,22 @@ fn matchStar(patt: []const RegOp, sets: *const CharSets, haystack: []const u8) O
         assert(!(i > haystack.len));
         if (i == haystack.len) break;
     }
-    return OpMatch{ .i = i, .j = 1 + nextPattern(patt) };
+    const next_patt = nextPattern(patt);
+    if (i == haystack.len and !atEnd(patt, i, 1 + next_patt, haystack)) {
+        // we're not done
+        i -= 1;
+    }
+    const maybe_next = matchPatternNoAlts(patt[next_patt..], sets, haystack[i..]);
+    if (maybe_next) |m2| {
+        return OpMatch{ .i = i + m2.i, .j = 1 + nextPattern(patt) + m2.j };
+    } // otherwise we gotta do the loopback dance.
+    while (i != 0) : (i -= 1) {
+        const try_next = matchPatternNoAlts(patt[next_patt..], sets, haystack[i..]);
+        if (try_next) |m2| {
+            return OpMatch{ .i = i + m2.i, .j = 1 + nextPattern(patt) + m2.j };
+        }
+    }
+    return OpMatch{ .i = 0, .j = 1 + next_patt };
 }
 
 fn matchPlus(patt: []const RegOp, sets: *const CharSets, haystack: []const u8) ?OpMatch {
@@ -1084,12 +1099,15 @@ test "match some things" {
     try testMatchAll("foo|bar|baz|bux|quux|quuux|quuuux", "quuuux");
     try testMatchAll("(abc)+d", "abcabcabcd");
     try testMatchAll("\t\n\r\xff\xff", "\t\n\r\xff\xff");
+    try testMatchAll("a+b", "ab");
+    try testMatchAll("a*aaa", "aaaaaaaaaaaaaa");
+    try testMatchAll("\\w+foo", "abcdefoo");
+    try testFail("\\w+foo", "foo");
+    try testMatchAll("\\w*foo", "foo");
 }
 
 test "workshop" {
     //
-    try testMatchAll("a+b", "ab");
-    // try testMatchAll("a*aaa", "aaaaaaaaaaaaaa");
 }
 
 test "iteration" {
