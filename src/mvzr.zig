@@ -940,21 +940,6 @@ fn printCharSet(set: CharSet) !void {
     std.debug.print("{s}\n", .{set_str.items});
 }
 
-test "compile some things" {
-    const a_star = compile("a*").?;
-    _ = a_star; // autofix
-    // printRegex(&a_star);
-    const a_group = compile("(abc)*").?;
-    _ = a_group; // autofix
-    // printRegex(&a_group);
-    const some_alts = compile("a|\\w+|2?").?;
-    _ = some_alts; // autofix
-    // printRegex(&some_alts);
-    const some_ranges = compile("[a-z][^a-z][abc^-]").?;
-    _ = some_ranges; // autofix
-    // printRegex(&some_ranges);
-}
-
 fn testMatchAll(needle: []const u8, haystack: []const u8) !void {
     const maybe_regex = compile(needle);
     if (maybe_regex) |regex| {
