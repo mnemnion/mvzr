@@ -62,7 +62,7 @@ pub fn build(b: *std.Build) void {
 
     // Export as module to be available for @import("mvzr") on user site
     _ = b.addModule("mvzr", .{
-        .root_source_file = b.path("mvzr.zig"),
+        .root_source_file = b.path("src/mvzr.zig"),
         .target = target,
         .optimize = optimize,
     });
