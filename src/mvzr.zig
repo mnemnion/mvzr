@@ -140,7 +140,7 @@ pub const RegexIterator = struct {
             return Match{
                 .slice = iter.haystack[m1..m2],
                 .start = m1,
-                .end = m1,
+                .end = m2,
             };
         } else {
             return null;
@@ -1046,14 +1046,19 @@ test "workshop" {
 }
 
 test "iteration" {
-    var r_iter = compile("foo|bar|baz").?.iterator("foobarbazfoo");
+    const foo_str = "foobarbazfoo";
+    var r_iter = compile("foo|bar|baz").?.iterator(foo_str);
     var matched = r_iter.next().?;
     try expectEqualStrings("foo", matched.slice);
+    try expectEqualStrings("foo", foo_str[matched.start..matched.end]);
     matched = r_iter.next().?;
     try expectEqualStrings("bar", matched.slice);
+    try expectEqualStrings("bar", foo_str[matched.start..matched.end]);
     matched = r_iter.next().?;
     try expectEqualStrings("baz", matched.slice);
+    try expectEqualStrings("baz", foo_str[matched.start..matched.end]);
     matched = r_iter.next().?;
     try expectEqualStrings("foo", matched.slice);
+    try expectEqualStrings("foo", foo_str[matched.start..matched.end]);
     try expectEqual(null, r_iter.next());
 }
