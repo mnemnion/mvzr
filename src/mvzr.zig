@@ -241,10 +241,14 @@ fn matchPatternNoAlts(patt: []const RegOp, sets: *const CharSets, haystack: []co
             return null;
         }
     }
-    if (j == patt.len or patt[j] == .unused or (patt[j] == .end and i == haystack.len))
+    if (atEnd(patt, i, j, haystack))
         return i
     else
         return null;
+}
+
+inline fn atEnd(patt: []const RegOp, i: usize, j: usize, haystack: []const u8) bool {
+    return j == patt.len or patt[j] == .unused or (patt[j] == .end and i == haystack.len);
 }
 
 const ascii = std.ascii;
