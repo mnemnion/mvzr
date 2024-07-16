@@ -34,6 +34,8 @@ const RegexType = enum(u8) {
     eager_optional,
     eager_star,
     eager_plus,
+    some,
+    up_to,
     dot,
     char,
     class,
@@ -62,6 +64,8 @@ pub const RegOp = union(RegexType) {
     eager_optional: void,
     eager_star: void,
     eager_plus: void,
+    some: u8,
+    up_to: u8,
     dot: void,
     char: u8, // character byte
     class: u8, // offset into class array
@@ -687,17 +691,37 @@ fn prefixModifier(patt: *[MAX_REGEX_OPS]RegOp, j: usize, op: RegOp) bool {
         .left,
         .alt,
         .optional,
-        .star,
         .plus,
         .lazy_optional,
         .lazy_star,
         .lazy_plus,
+        .eager_optional,
+        .eager_star,
+        .eager_plus,
+        .some,
         => {
             logError("found a modifier on a modifier", .{});
             return false;
+        }, // Allowed for {M,} and {M,N} purposes
+        .star => {
+            if (op != .some) {
+                logError("found a modifier on a modifier", .{});
+                return false;
+            }
+            find_j -= 1;
+        },
+        .up_to => {
+            if (op != .some) {
+                logError("found a modifier on a modifier", .{});
+                return false;
+            }
+            find_j -= 1;
         },
         .right => {
             find_j = beforePriorLeft(patt, find_j);
+            if (op == .some and (patt[find_j] == .star or patt[find_j] == .up_to)) {
+                find_j -= 1;
+            }
         },
         else => {},
     } // find_j is at our insert offset
@@ -860,25 +884,55 @@ pub fn compile(in: []const u8) ?Regex {
                     bad_string = true;
                     break :dispatch;
                 };
-                i += d1 + 1;
-                if (XXX) _ = c1;
+                i += d1;
                 if (in[i] == ',') {
                     i += 1;
                     if (in[i] == '}') {
-                        // some and more
+                        var ok = prefixModifier(patt, j, RegOp{ .star = {} });
+                        if (!ok) {
+                            bad_string = true;
+                            break :dispatch;
+                        }
+                        ok = prefixModifier(patt, j, RegOp{ .some = c1 });
+                        if (!ok) {
+                            bad_string = true;
+                            break :dispatch;
+                        }
+                        continue :dispatch;
                     }
                     const d2, const c2 = parseByte(in[i..]) catch {
                         bad_string = true;
                         break :dispatch;
                     };
-                    //
-                    if (XXX) {
-                        _ = d2;
-                        _ = c2;
+                    i += d2;
+                    if (in[i] != '}') {
+                        bad_string = true;
+                        break :dispatch;
+                    }
+                    if (c1 > c2) {
+                        logError("{d} > {d}\n", .{ c1, c2 });
+                        bad_string = true;
+                        break :dispatch;
+                    }
+                    const c_rest = c2 - c1;
+                    var ok = prefixModifier(patt, j, RegOp{ .up_to = c_rest });
+                    if (!ok) {
+                        bad_string = true;
+                        break :dispatch;
+                    }
+                    j += 1;
+                    ok = prefixModifier(patt, j, RegOp{ .some = c1 });
+                    if (!ok) {
+                        bad_string = true;
+                        break :dispatch;
                     }
                 } else if (in[i] == '}') {
                     // fixed amount
-
+                    const ok = prefixModifier(patt, j, RegOp{ .some = c1 });
+                    if (!ok) {
+                        bad_string = true;
+                        break :dispatch;
+                    }
                 }
             },
             '|' => {
