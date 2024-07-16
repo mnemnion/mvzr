@@ -109,6 +109,7 @@ const Regex = struct {
     }
 };
 
+/// Match `pattern` in `haystack`.
 pub fn match(haystack: []const u8, pattern: []const u8) ?usize {
     const maybe_regex = compile(pattern);
     if (maybe_regex) |regex| {
@@ -119,16 +120,13 @@ pub fn match(haystack: []const u8, pattern: []const u8) ?usize {
 }
 
 fn matchPattern(regex: []const RegOp, set: *const CharSets, haystack: []const u8) ?usize {
-    const alt_count = countAlt(regex);
-    if (alt_count > 0) {
-        switch (alt_count) {
-            1 => return dispatchTwoAlts(regex, set, haystack),
-            2 => return dispatchThreeAlts(regex, set, haystack),
-            3 => return dispatchFourAlts(regex, set, haystack),
-            else => return dispatchMoreAlts(regex, set, haystack),
-        }
+    switch (countAlt(regex)) {
+        0 => return matchPatternNoAlts(regex, set, haystack),
+        1 => return dispatchTwoAlts(regex, set, haystack),
+        2 => return dispatchThreeAlts(regex, set, haystack),
+        3 => return dispatchFourAlts(regex, set, haystack),
+        else => return dispatchMoreAlts(regex, set, haystack),
     }
-    return matchPatternNoAlts(regex, set, haystack);
 }
 
 fn matchPatternNoAlts(patt: []const RegOp, sets: *const CharSets, haystack: []const u8) ?usize {
