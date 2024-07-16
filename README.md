@@ -30,6 +30,14 @@ This is that library.  It's a simple bytecode-based Commander Pike-style VM.  Le
 
 As long as you color within the lines, it should be fine.
 
+## Interface
+
+```zig
+const regex = mvzr.compile(patt_str);
+const first, const last = regex.match(haystack).?;
+const first2, const last2 = match(haystack, patt_str).?;
+```
+
 ## Bugs
 
 I wrote this thing in two days flat (check the log).  There are bugs.  Point them out and I might even fix them.
