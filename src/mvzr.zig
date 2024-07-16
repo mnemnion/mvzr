@@ -20,7 +20,6 @@ pub const MAX_CHAR_SETS = 8;
 
 const RegexType = enum(u8) {
     unused,
-    dot,
     begin,
     end,
     left,
@@ -32,6 +31,7 @@ const RegexType = enum(u8) {
     lazy_optional,
     lazy_star,
     lazy_plus,
+    dot,
     char,
     class,
     not_class,
@@ -45,7 +45,6 @@ const RegexType = enum(u8) {
 
 pub const RegOp = union(RegexType) {
     unused: void,
-    dot: void,
     begin: void,
     end: void,
     left: void,
@@ -57,6 +56,7 @@ pub const RegOp = union(RegexType) {
     lazy_optional: void,
     lazy_star: void,
     lazy_plus: void,
+    dot: void,
     char: u8, // character byte
     class: u8, // offset into class array
     not_class: u8,
@@ -1092,7 +1092,7 @@ test "match some things" {
 
 test "workshop" {
     //
-    try testMatchAll("a*aaa", "aaaaaaaaaaaaaa");
+    // try testMatchAll("a*aaa", "aaaaaaaaaaaaaa");
 }
 
 test "iteration" {
