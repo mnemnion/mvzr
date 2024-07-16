@@ -60,6 +60,13 @@ pub fn build(b: *std.Build) void {
 
     const run_lib_unit_tests = b.addRunArtifact(lib_unit_tests);
 
+    // Export as module to be available for @import("mvzr") on user site
+    _ = b.addModule("mvzr", .{
+        .root_source_file = b.path("mvzr.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
     // Similar to creating the run step earlier, this exposes a `test` step to
     // the `zig build --help` menu, providing a way for the user to request
     // running the unit tests.
