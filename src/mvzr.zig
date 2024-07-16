@@ -31,6 +31,7 @@ const RegexType = enum(u8) {
     lazy_optional,
     lazy_star,
     lazy_plus,
+    eager_optional,
     eager_star,
     eager_plus,
     dot,
@@ -58,6 +59,7 @@ pub const RegOp = union(RegexType) {
     lazy_optional: void,
     lazy_star: void,
     lazy_plus: void,
+    eager_optional: void,
     eager_star: void,
     eager_plus: void,
     dot: void,
@@ -226,12 +228,13 @@ fn matchPatternNoAlts(patt: []const RegOp, sets: *const CharSets, haystack: []co
             .not_whitespace,
             .char,
             => matchOne(patt[j], sets, haystack[i]),
+            .optional => matchOptional(patt[j + 1 ..], sets, haystack[i..]),
             .star => matchStar(patt[j + 1 ..], sets, haystack[i..]),
             .plus => matchPlus(patt[j + 1 ..], sets, haystack[i..]),
-            .optional => matchOptional(patt[j + 1 ..], sets, haystack[i..]),
+            .lazy_optional => matchLazyOptional(patt[j + 1 ..], sets, haystack[i..]),
             .lazy_star => matchLazyStar(patt[j + 1 ..], sets, haystack[i..]),
             .lazy_plus => matchLazyPlus(patt[j + 1 ..], sets, haystack[i..]),
-            .lazy_optional => matchLazyOptional(patt[j + 1 ..], sets, haystack[i..]),
+            .eager_optional => matchEagerOptional(patt[j + 1 ..], sets, haystack[i..]),
             .eager_star => matchEagerStar(patt[j + 1 ..], sets, haystack[i..]),
             .eager_plus => matchEagerPlus(patt[j + 1 ..], sets, haystack[i..]),
             .end => matchEnd(i, haystack),
@@ -335,6 +338,32 @@ fn matchPlus(patt: []const RegOp, sets: *const CharSets, haystack: []const u8) ?
 }
 
 fn matchOptional(patt: []const RegOp, sets: *const CharSets, haystack: []const u8) OpMatch {
+    const group, const this_patt = thisPattern(patt);
+    const match_fn = if (group)
+        &matchPattern
+    else
+        &matchPatternNoAlts;
+    const maybe_m = match_fn(this_patt, sets, haystack);
+    if (maybe_m) |m1| {
+        // See if we can succeed here
+        const next_patt = nextPattern(patt);
+        var i = m1.i;
+        if (i == haystack.len and !atEnd(patt, i, 1 + next_patt, haystack)) {
+            // Reset (we still have m1.i)
+            i = 0;
+        }
+        const maybe_next = matchPatternNoAlts(patt[next_patt..], sets, haystack[i..]);
+        if (maybe_next) |m2| {
+            return OpMatch{ .i = i + m2.i, .j = 1 + nextPattern(patt) + m2.j };
+        } else {
+            return OpMatch{ .i = 0, .j = 1 + nextPattern(patt) };
+        }
+    } else {
+        return OpMatch{ .i = 0, .j = 1 + nextPattern(patt) };
+    }
+}
+
+fn matchEagerOptional(patt: []const RegOp, sets: *const CharSets, haystack: []const u8) OpMatch {
     const group, const this_patt = thisPattern(patt);
     const match_fn = if (group)
         &matchPattern
@@ -746,7 +775,6 @@ pub fn compile(in: []const u8) ?Regex {
                         break :dispatch;
                     }
                 } else if (i + 1 < in.len and in[i + 1] == '+') {
-                    //
                     i += 1;
                     const ok = prefixModifier(patt, j, RegOp{ .eager_star = {} });
                     if (!ok) {
@@ -770,12 +798,12 @@ pub fn compile(in: []const u8) ?Regex {
                         break :dispatch;
                     }
                 } else if (i + 1 < in.len and in[i + 1] == '+') {
-                    // XXX port eager optional
-                    //  const ok = prefixModifier(patt, j, RegOp{ .lazy_optional = {} });
-                    //  if (!ok) {
-                    //      bad_string = true;
-                    //      break :dispatch;
-                    //  }
+                    i += 1;
+                    const ok = prefixModifier(patt, j, RegOp{ .eager_optional = {} });
+                    if (!ok) {
+                        bad_string = true;
+                        break :dispatch;
+                    }
                 } else {
                     const ok = prefixModifier(patt, j, RegOp{ .optional = {} });
                     if (!ok) {
@@ -1164,6 +1192,8 @@ test "match some things" {
     try testMatchAll("\\w*foo", "foo");
     try testFail("a++a", "aaaaaaaa");
     try testFail("a*+a", "aaaaaaaa");
+    try testMatchAll("(aaa)?aaa", "aaa");
+    try testFail("(aaa)?+aaa", "aaa");
 }
 
 test "workshop" {
