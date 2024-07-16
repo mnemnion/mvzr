@@ -115,17 +115,17 @@ const Regex = struct {
         const patt = regex.patt;
         switch (patt[0]) {
             .begin => {
-                const width = matchPattern(patt[1..], &regex.sets, haystack);
-                if (width) |w| {
-                    return .{ 0, w };
+                const matched = matchPattern(patt[1..], &regex.sets, haystack);
+                if (matched) |m| {
+                    return .{ 0, m.i };
                 } else return null;
             },
             else => {
                 var matchlen: usize = 0;
                 while (matchlen < haystack.len) : (matchlen += 1) {
-                    const width = matchPattern(&patt, &regex.sets, haystack[matchlen..]);
-                    if (width) |w| {
-                        return .{ matchlen, matchlen + w };
+                    const matched = matchPattern(&patt, &regex.sets, haystack[matchlen..]);
+                    if (matched) |m| {
+                        return .{ matchlen, matchlen + m.i };
                     }
                 }
                 return null;
@@ -196,7 +196,7 @@ pub fn match(haystack: []const u8, pattern: []const u8) ?Match {
     }
 }
 
-fn matchPattern(regex: []const RegOp, set: *const CharSets, haystack: []const u8) ?usize {
+fn matchPattern(regex: []const RegOp, set: *const CharSets, haystack: []const u8) ?OpMatch {
     switch (countAlt(regex)) {
         0 => return matchPatternNoAlts(regex, set, haystack),
         1 => return dispatchTwoAlts(regex, set, haystack),
@@ -206,7 +206,7 @@ fn matchPattern(regex: []const RegOp, set: *const CharSets, haystack: []const u8
     }
 }
 
-fn matchPatternNoAlts(patt: []const RegOp, sets: *const CharSets, haystack: []const u8) ?usize {
+fn matchPatternNoAlts(patt: []const RegOp, sets: *const CharSets, haystack: []const u8) ?OpMatch {
     var i: usize = 0;
     var j: usize = 0;
     while (j < patt.len and patt[j] != .unused) {
@@ -242,7 +242,7 @@ fn matchPatternNoAlts(patt: []const RegOp, sets: *const CharSets, haystack: []co
         }
     }
     if (atEnd(patt, i, j, haystack))
-        return i
+        return OpMatch{ .i = i, .j = j }
     else
         return null;
 }
@@ -292,7 +292,7 @@ fn matchStar(patt: []const RegOp, sets: *const CharSets, haystack: []const u8) ?
     else
         &matchPatternNoAlts;
     while (match_fn(this_patt, sets, haystack[i..])) |m| {
-        i += m;
+        i += m.i;
         assert(!(i > haystack.len));
         if (i == haystack.len) break;
     }
@@ -307,13 +307,13 @@ fn matchPlus(patt: []const RegOp, sets: *const CharSets, haystack: []const u8) ?
         &matchPatternNoAlts;
     const first_m = match_fn(this_patt, sets, haystack);
     if (first_m == null) return null;
-    const i = first_m.?;
-    if (i == haystack.len) return OpMatch{ .i = i, .j = 1 + nextPattern(patt) };
-    const rest = matchStar(patt, sets, haystack[i..]);
-    if (rest) |m| {
-        return OpMatch{ .i = i + m.i, .j = m.j };
+    const m1 = first_m.?;
+    if (m1.i == haystack.len) return OpMatch{ .i = m1.i, .j = 1 + nextPattern(patt) };
+    const rest = matchStar(patt, sets, haystack[m1.i..]);
+    if (rest) |m2| {
+        return OpMatch{ .i = m1.i + m2.i, .j = m2.j };
     } else {
-        return OpMatch{ .i = i, .j = 1 + nextPattern(patt) };
+        return OpMatch{ .i = m1.i, .j = 1 + nextPattern(patt) };
     }
 }
 
@@ -325,7 +325,7 @@ fn matchOptional(patt: []const RegOp, sets: *const CharSets, haystack: []const u
         &matchPatternNoAlts;
     const maybe_m = match_fn(this_patt, sets, haystack);
     if (maybe_m) |m| {
-        return OpMatch{ .i = m, .j = 1 + nextPattern(patt) };
+        return OpMatch{ .i = m.i, .j = 1 + nextPattern(patt) };
     } else {
         return OpMatch{ .i = 0, .j = 1 + nextPattern(patt) };
     }
@@ -345,20 +345,20 @@ fn matchLazyStar(patt: []const RegOp, sets: *const CharSets, haystack: []const u
     // Other guy gets the first shot
     const m_init = next_fn(next_patt, sets, haystack);
     if (m_init) |m| {
-        return OpMatch{ .i = m, .j = 1 + this_patt.len + pattEnd(next_patt) };
+        return OpMatch{ .i = m.i, .j = 1 + this_patt.len + pattEnd(next_patt) };
     }
     var i: usize = 0;
     while (true) {
         const maybe = match_fn(this_patt, sets, haystack[i..]);
         if (maybe) |m1| {
             // let the other guy have some
-            i += m1;
+            i += m1.i;
             if (i == haystack.len)
                 return OpMatch{ .i = i, .j = 1 + nextPattern(patt) };
             const m_next = next_fn(next_patt, sets, haystack[i..]);
             if (m_next) |m2| {
                 // done
-                i += m2;
+                i += m2.i;
                 // skip our lazy star and our matcher
                 return OpMatch{ .i = i, .j = 1 + this_patt.len + pattEnd(next_patt) };
             }
@@ -377,13 +377,13 @@ fn matchLazyPlus(patt: []const RegOp, sets: *const CharSets, haystack: []const u
         &matchPatternNoAlts;
     const first_m = match_fn(this_patt, sets, haystack);
     if (first_m == null) return null;
-    const i = first_m.?;
-    if (i == haystack.len) return OpMatch{ .i = i, .j = 1 + nextPattern(patt) };
-    const rest = matchLazyStar(patt, sets, haystack[i..]);
-    if (rest) |m| {
-        return OpMatch{ .i = i + m.i, .j = m.j };
+    const m1 = first_m.?;
+    if (m1.i == haystack.len) return OpMatch{ .i = m1.i, .j = 1 + nextPattern(patt) };
+    const rest = matchLazyStar(patt, sets, haystack[m1.i..]);
+    if (rest) |m2| {
+        return OpMatch{ .i = m2.i + m2.i, .j = m2.j };
     } else {
-        return OpMatch{ .i = i, .j = 1 + nextPattern(patt) };
+        return OpMatch{ .i = m1.i, .j = 1 + nextPattern(patt) };
     }
 }
 
@@ -392,7 +392,7 @@ fn matchLazyOptional(patt: []const RegOp, sets: *const CharSets, haystack: []con
     // try the rest first
     const maybe_match = matchPattern(patt[this_patt.len..], sets, haystack);
     if (maybe_match) |m| {
-        return OpMatch{ .i = m, .j = 1 + pattEnd(patt) };
+        return OpMatch{ .i = m.i, .j = 1 + pattEnd(patt) };
     }
     return matchOptional(patt, sets, haystack);
 }
@@ -401,7 +401,7 @@ fn matchGroup(patt: []const RegOp, sets: *const CharSets, haystack: []const u8) 
     const inner_patt = sliceGroup(patt);
     const maybe_m = matchPattern(inner_patt, sets, haystack);
     if (maybe_m) |m| {
-        return OpMatch{ .i = m, .j = 2 + inner_patt.len };
+        return OpMatch{ .i = m.i, .j = 2 + inner_patt.len };
     } else {
         return null;
     }
@@ -414,7 +414,7 @@ fn matchFourPatterns(
     fourth: []const RegOp,
     sets: *const CharSets,
     haystack: []const u8,
-) ?usize {
+) ?OpMatch {
     const m1m = matchPatternNoAlts(first, sets, haystack);
     if (m1m) |m1| {
         return m1;
@@ -429,7 +429,7 @@ fn matchThreePatterns(
     third: []const RegOp,
     sets: *const CharSets,
     haystack: []const u8,
-) ?usize {
+) ?OpMatch {
     const m1m = matchPatternNoAlts(first, sets, haystack);
     if (m1m) |m1| {
         return m1;
@@ -443,7 +443,7 @@ fn matchTwoPatterns(
     second: []const RegOp,
     sets: *const CharSets,
     haystack: []const u8,
-) ?usize {
+) ?OpMatch {
     const m1m = matchPatternNoAlts(first, sets, haystack);
     if (m1m) |m1| {
         return m1;
@@ -452,20 +452,20 @@ fn matchTwoPatterns(
     }
 }
 
-fn dispatchTwoAlts(patt: []const RegOp, sets: *const CharSets, haystack: []const u8) ?usize {
+fn dispatchTwoAlts(patt: []const RegOp, sets: *const CharSets, haystack: []const u8) ?OpMatch {
     const first = sliceAlt(patt);
     const second = patt[first.len + 1 ..];
     return matchTwoPatterns(first, second, sets, haystack);
 }
 
-fn dispatchThreeAlts(patt: []const RegOp, sets: *const CharSets, haystack: []const u8) ?usize {
+fn dispatchThreeAlts(patt: []const RegOp, sets: *const CharSets, haystack: []const u8) ?OpMatch {
     const first = sliceAlt(patt);
     const second = sliceAlt(patt[first.len + 1 ..]);
     const third = patt[first.len + second.len + 2 ..];
     return matchThreePatterns(first, second, third, sets, haystack);
 }
 
-fn dispatchFourAlts(patt: []const RegOp, sets: *const CharSets, haystack: []const u8) ?usize {
+fn dispatchFourAlts(patt: []const RegOp, sets: *const CharSets, haystack: []const u8) ?OpMatch {
     const first = sliceAlt(patt);
     const second = sliceAlt(patt[first.len + 1 ..]);
     const third = sliceAlt(patt[first.len + second.len + 2 ..]);
@@ -473,7 +473,7 @@ fn dispatchFourAlts(patt: []const RegOp, sets: *const CharSets, haystack: []cons
     return matchFourPatterns(first, second, third, fourth, sets, haystack);
 }
 
-fn dispatchMoreAlts(patt: []const RegOp, sets: *const CharSets, haystack: []const u8) ?usize {
+fn dispatchMoreAlts(patt: []const RegOp, sets: *const CharSets, haystack: []const u8) ?OpMatch {
     const first = sliceAlt(patt);
     const second = sliceAlt(patt[first.len + 1 ..]);
     const third = sliceAlt(patt[first.len + second.len + 2 ..]);
