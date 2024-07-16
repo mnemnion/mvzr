@@ -31,6 +31,8 @@ const RegexType = enum(u8) {
     lazy_optional,
     lazy_star,
     lazy_plus,
+    eager_star,
+    eager_plus,
     dot,
     char,
     class,
@@ -56,6 +58,8 @@ pub const RegOp = union(RegexType) {
     lazy_optional: void,
     lazy_star: void,
     lazy_plus: void,
+    eager_star: void,
+    eager_plus: void,
     dot: void,
     char: u8, // character byte
     class: u8, // offset into class array
@@ -228,6 +232,8 @@ fn matchPatternNoAlts(patt: []const RegOp, sets: *const CharSets, haystack: []co
             .lazy_star => matchLazyStar(patt[j + 1 ..], sets, haystack[i..]),
             .lazy_plus => matchLazyPlus(patt[j + 1 ..], sets, haystack[i..]),
             .lazy_optional => matchLazyOptional(patt[j + 1 ..], sets, haystack[i..]),
+            .eager_star => matchEagerStar(patt[j + 1 ..], sets, haystack[i..]),
+            .eager_plus => matchEagerPlus(patt[j + 1 ..], sets, haystack[i..]),
             .end => matchEnd(i, haystack),
             .left => matchGroup(patt[j..], sets, haystack[i..]),
             else => unreachable, // probably
@@ -402,6 +408,35 @@ fn matchLazyOptional(patt: []const RegOp, sets: *const CharSets, haystack: []con
         return OpMatch{ .i = m.i, .j = 1 + pattEnd(patt) };
     }
     return matchOptional(patt, sets, haystack);
+}
+
+fn matchEagerPlus(patt: []const RegOp, sets: *const CharSets, haystack: []const u8) ?OpMatch {
+    const group, const this_patt = thisPattern(patt);
+    const match_fn = if (group)
+        &matchPattern
+    else
+        &matchPatternNoAlts;
+    const first_m = match_fn(this_patt, sets, haystack);
+    if (first_m == null) return null;
+    const m1 = first_m.?;
+    if (m1.i == haystack.len) return OpMatch{ .i = m1.i, .j = 1 + nextPattern(patt) };
+    const m2 = matchEagerStar(patt, sets, haystack[m1.i..]);
+    return OpMatch{ .i = m1.i + m2.i, .j = m2.j };
+}
+
+fn matchEagerStar(patt: []const RegOp, sets: *const CharSets, haystack: []const u8) OpMatch {
+    var i: usize = 0;
+    const group, const this_patt = thisPattern(patt);
+    const match_fn = if (group)
+        &matchPattern
+    else
+        &matchPatternNoAlts;
+    while (match_fn(this_patt, sets, haystack[i..])) |m| {
+        i += m.i;
+        assert(!(i > haystack.len));
+        if (i == haystack.len) break;
+    }
+    return OpMatch{ .i = i, .j = 1 + nextPattern(patt) };
 }
 
 fn matchGroup(patt: []const RegOp, sets: *const CharSets, haystack: []const u8) ?OpMatch {
@@ -710,6 +745,14 @@ pub fn compile(in: []const u8) ?Regex {
                         bad_string = true;
                         break :dispatch;
                     }
+                } else if (i + 1 < in.len and in[i + 1] == '+') {
+                    //
+                    i += 1;
+                    const ok = prefixModifier(patt, j, RegOp{ .eager_star = {} });
+                    if (!ok) {
+                        bad_string = true;
+                        break :dispatch;
+                    }
                 } else {
                     const ok = prefixModifier(patt, j, RegOp{ .star = {} });
                     if (!ok) {
@@ -726,6 +769,13 @@ pub fn compile(in: []const u8) ?Regex {
                         bad_string = true;
                         break :dispatch;
                     }
+                } else if (i + 1 < in.len and in[i + 1] == '+') {
+                    // XXX port eager optional
+                    //  const ok = prefixModifier(patt, j, RegOp{ .lazy_optional = {} });
+                    //  if (!ok) {
+                    //      bad_string = true;
+                    //      break :dispatch;
+                    //  }
                 } else {
                     const ok = prefixModifier(patt, j, RegOp{ .optional = {} });
                     if (!ok) {
@@ -738,6 +788,14 @@ pub fn compile(in: []const u8) ?Regex {
                 if (i + 1 < in.len and in[i + 1] == '?') {
                     i += 1;
                     const ok = prefixModifier(patt, j, RegOp{ .lazy_plus = {} });
+                    if (!ok) {
+                        bad_string = true;
+                        break :dispatch;
+                    }
+                } else if (i + 1 < in.len and in[i + 1] == '+') {
+                    //
+                    i += 1;
+                    const ok = prefixModifier(patt, j, RegOp{ .eager_plus = {} });
                     if (!ok) {
                         bad_string = true;
                         break :dispatch;
@@ -1104,6 +1162,8 @@ test "match some things" {
     try testMatchAll("\\w+foo", "abcdefoo");
     try testFail("\\w+foo", "foo");
     try testMatchAll("\\w*foo", "foo");
+    try testFail("a++a", "aaaaaaaa");
+    try testFail("a*+a", "aaaaaaaa");
 }
 
 test "workshop" {
