@@ -84,9 +84,33 @@ const Regex = struct {
     patt: [MAX_REGEX_OPS]RegOp = [1]RegOp{undefined} ** MAX_REGEX_OPS,
     sets: [MAX_CHAR_SETS]CharSet = [1]CharSet{undefined} ** MAX_CHAR_SETS,
 
-    /// Match a regex pattern in `haystack`, if found, this returns `.{start, end}`
-    pub fn match(regex: *const Regex, haystack: []const u8) ?struct { usize, usize } {
+    /// Match a regex pattern in `haystack`, if found, this returns a `Match`.
+    pub fn match(regex: *const Regex, haystack: []const u8) ?Match {
         if (haystack.len == 0) return null;
+        const maybe_matched = regex.matchInternal(haystack);
+        if (maybe_matched) |m| {
+            const m1 = m[0];
+            const m2 = m[1];
+            return Match{
+                .slice = haystack[m1..m2],
+                .start = m1,
+                .end = m2,
+            };
+        } else {
+            return null;
+        }
+    }
+
+    pub fn isMatch(regex: *const Regex, haystack: []const u8) bool {
+        const maybe_matched = regex.matchInternal(haystack);
+        if (maybe_matched) |_| {
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    fn matchInternal(regex: *const Regex, haystack: []const u8) ?struct { usize, usize } {
         const patt = regex.patt;
         switch (patt[0]) {
             .begin => {
@@ -119,11 +143,24 @@ const Regex = struct {
     }
 };
 
-/// A single match as delivered by `regex.iterate(haystack)`.
+/// A single match as returned from `regex.match` and `regex.iterator`.
+/// Note that the slice is borrowed from the haystack: to own it, call
+/// `try match.toOwned(allocator)`.
 pub const Match = struct {
     slice: []const u8,
     start: usize,
     end: usize,
+
+    /// Return an copy of the Match with fresh memory allocator for the
+    /// slice.
+    pub fn toOwned(matched: Match, allocator: std.mem.Allocator) !Match {
+        const new_slice = try allocator.dupe(u8, matched.slice);
+        return Match{
+            .slice = new_slice,
+            .start = matched.start,
+            .end = matched.end,
+        };
+    }
 };
 
 pub const RegexIterator = struct {
@@ -134,13 +171,13 @@ pub const RegexIterator = struct {
     pub fn next(iter: *RegexIterator) ?Match {
         const maybe_match = iter.regex.match(iter.haystack[iter.idx..]);
         if (maybe_match) |m| {
-            const m1 = m[0] + iter.idx;
-            const m2 = m[1] + iter.idx;
-            iter.idx += m[1];
+            const m_start = m.start + iter.idx;
+            const m_end = m.end + iter.idx;
+            iter.idx += m.end;
             return Match{
-                .slice = iter.haystack[m1..m2],
-                .start = m1,
-                .end = m2,
+                .slice = m.slice,
+                .start = m_start,
+                .end = m_end,
             };
         } else {
             return null;
@@ -149,7 +186,7 @@ pub const RegexIterator = struct {
 };
 
 /// Match `pattern` in `haystack`.
-pub fn match(haystack: []const u8, pattern: []const u8) ?struct { usize, usize } {
+pub fn match(haystack: []const u8, pattern: []const u8) ?Match {
     const maybe_regex = compile(pattern);
     if (maybe_regex) |regex| {
         return regex.match(haystack);
@@ -983,8 +1020,8 @@ fn testMatchAll(needle: []const u8, haystack: []const u8) !void {
     if (maybe_regex) |regex| {
         const maybe_match = regex.match(haystack);
         if (maybe_match) |m| {
-            try expectEqual(0, m[0]);
-            try expectEqual(haystack.len, m[1]);
+            try expectEqual(0, m.start);
+            try expectEqual(haystack.len, m.end);
         } else {
             try expect(false);
         }
@@ -1061,4 +1098,10 @@ test "iteration" {
     try expectEqualStrings("foo", matched.slice);
     try expectEqualStrings("foo", foo_str[matched.start..matched.end]);
     try expectEqual(null, r_iter.next());
+}
+
+test "comptime regex" {
+    const comp_regex = comptime compile("foo+").?;
+    const run_match = comp_regex.match("foofoofoo");
+    try expect(run_match != null);
 }
