@@ -20,13 +20,13 @@ This is that library.  It's a simple bytecode-based Commander Pike-style VM.  Le
 
 - Only 64 operations per regex
 - Only 8 character sets per regex (ASCII only)
-    - These could probably be made comptime-configurable, but I didn't
+    - These values could probably be made comptime-configurable, but I didn't
 - No Unicode support to speak of
 - No fancy modifiers (you want case-insensitive, great, lowercase your string)
 - `.` matches anything (split into lines first if you don't like this)
 - Backtracks (sorry. For this to work without backtracking, we need async back)
 - Compiler does some best-effort validation but I haven't really pounded on it
-- Not min/max `{X,}`, `{X,Y}`.  Might get around to it (escape your curlies just in case)
+- No min/max `{X,}`, `{X,Y}`.  Might get around to it (escape your curlies just in case)
 
 As long as you color within the lines, it should be fine.
 
