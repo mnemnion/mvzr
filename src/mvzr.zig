@@ -708,7 +708,6 @@ fn prefixModifier(patt: *[MAX_REGEX_OPS]RegOp, j: usize, op: RegOp) bool {
                 logError("found a modifier on a modifier", .{});
                 return false;
             }
-            find_j -= 1;
         },
         .up_to => {
             if (op != .some) {
@@ -719,7 +718,9 @@ fn prefixModifier(patt: *[MAX_REGEX_OPS]RegOp, j: usize, op: RegOp) bool {
         },
         .right => {
             find_j = beforePriorLeft(patt, find_j);
-            if (op == .some and (patt[find_j] == .star or patt[find_j] == .up_to)) {
+            // XXX
+            if (op == .some and find_j > 0 and (patt[find_j - 1] == .star or patt[find_j - 1] == .up_to)) {
+                std.debug.print("reached", .{});
                 find_j -= 1;
             }
         },
@@ -759,7 +760,7 @@ fn beforePriorLeft(patt: *const [MAX_REGEX_OPS]RegOp, j: usize) usize {
 }
 
 inline fn countDigits(in: []const u8) usize {
-    var i = 0;
+    var i: usize = 0;
     while (i < in.len and ascii.isDigit(in[i])) : (i += 1) {}
     return i;
 }
@@ -767,7 +768,7 @@ inline fn countDigits(in: []const u8) usize {
 fn parseByte(in: []const u8) !struct { usize, u8 } {
     const d1 = countDigits(in);
     if (d1 == 0 or d1 >= 4) return error.BadString;
-    const c1 = std.fmt.parseInt(u16, in[0..d1]) catch {
+    const c1 = std.fmt.parseInt(u16, in[0..d1], 10) catch {
         return error.BadString;
     };
     if (c1 >= 254) {
@@ -878,28 +879,29 @@ pub fn compile(in: []const u8) ?Regex {
                     }
                 }
             },
-            '{' => {
+            '{' => { // {M,N} etc.
                 i += 1;
                 const d1, const c1 = parseByte(in[i..]) catch {
                     bad_string = true;
                     break :dispatch;
                 };
                 i += d1;
-                if (in[i] == ',') {
+                if (in[i] == ',') { // {M,?
                     i += 1;
-                    if (in[i] == '}') {
+                    if (in[i] == '}') { // {M,}
                         var ok = prefixModifier(patt, j, RegOp{ .star = {} });
                         if (!ok) {
                             bad_string = true;
                             break :dispatch;
                         }
+                        j += 1;
                         ok = prefixModifier(patt, j, RegOp{ .some = c1 });
                         if (!ok) {
                             bad_string = true;
                             break :dispatch;
                         }
                         continue :dispatch;
-                    }
+                    } // {M,N}
                     const d2, const c2 = parseByte(in[i..]) catch {
                         bad_string = true;
                         break :dispatch;
@@ -927,7 +929,7 @@ pub fn compile(in: []const u8) ?Regex {
                         break :dispatch;
                     }
                 } else if (in[i] == '}') {
-                    // fixed amount
+                    // {M}
                     const ok = prefixModifier(patt, j, RegOp{ .some = c1 });
                     if (!ok) {
                         bad_string = true;
@@ -1296,7 +1298,8 @@ test "match some things" {
 }
 
 test "workshop" {
-    //
+    const m_n = compile("(abc){2}").?;
+    printRegex(&m_n);
 }
 
 test "iteration" {
