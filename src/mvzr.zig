@@ -241,7 +241,8 @@ fn matchPatternNoAlts(patt: []const RegOp, sets: *const CharSets, haystack: []co
             .eager_optional => matchEagerOptional(patt[j + 1 ..], sets, haystack[i..]),
             .eager_star => matchEagerStar(patt[j + 1 ..], sets, haystack[i..]),
             .eager_plus => matchEagerPlus(patt[j + 1 ..], sets, haystack[i..]),
-            .some => matchSome(patt[j + 1 ..], sets, haystack[i..]),
+            .some => matchSome(patt[j..], sets, haystack[i..]),
+            .up_to => matchUpTo(patt[j..], sets, haystack[i..]),
             .end => matchEnd(i, haystack),
             .left => matchGroup(patt[j..], sets, haystack[i..]),
             else => unreachable, // probably
@@ -509,25 +510,48 @@ fn matchUpTo(patt: []const RegOp, sets: *const CharSets, haystack: []const u8) ?
 fn matchUpToInner(patt: []const RegOp, sets: *const CharSets, haystack: []const u8, count: usize) ?OpMatch {
     // Base case:
     if (count == 0) { // Take the next pattern or backtrack
-        // return OpMatch{ .i = 0, .j = 1 + nextPattern(patt) };
+        const next_patt_len = nextPattern(patt);
+        const next_patt = patt[next_patt_len..];
+        const next_fn = if (findAlt(next_patt, 0)) |_|
+            &matchPattern
+        else
+            &matchPatternNoAlts;
+        const maybe_next = next_fn(next_patt, sets, haystack);
+        if (maybe_next) |m2| {
+            return OpMatch{ .i = m2.i, .j = 1 + nextPattern(patt) + m2.j };
+        } else {
+            return null; // Try again down below
+        }
     }
+    // Recursive case
     const group, const this_patt = thisPattern(patt);
     const match_fn = if (group)
         &matchPattern
     else
         &matchPatternNoAlts;
-    var i = 0;
+    var i: usize = 0;
     const first_m = match_fn(this_patt, sets, haystack);
     if (first_m) |m1| {
         i += m1.i;
     } else {
         return OpMatch{ .i = 0, .j = nextPattern(patt) };
     }
-    const next_match = matchUpToInner(patt, sets, haystack, count - 1);
+    const next_match = matchUpToInner(patt, sets, haystack[i..], count - 1);
     if (next_match) |m2| {
         return OpMatch{ .i = i + m2.i, .j = nextPattern(patt) };
-    } else {
-        return OpMatch{ .i = i, .j = nextPattern(patt) };
+    } else { // Try the next pattern
+        const next_patt_len = nextPattern(patt);
+        const next_patt = patt[next_patt_len..];
+        const next_fn = if (findAlt(next_patt, 0)) |_|
+            &matchPattern
+        else
+            &matchPatternNoAlts;
+        const maybe_next = next_fn(next_patt, sets, haystack[i..]);
+        if (maybe_next) |m2| {
+            return OpMatch{ .i = i + m2.i, .j = 1 + nextPattern(patt) + m2.j };
+        } else {
+            return null; // Try again up stack
+        }
     }
 }
 
@@ -786,6 +810,13 @@ fn prefixModifier(patt: *[MAX_REGEX_OPS]RegOp, j: usize, op: RegOp) bool {
         else => {},
     } // find_j is at our insert offset
     var move_op = patt[find_j];
+    if (op == .some and find_j > 0) {
+        const prev_op = patt[find_j - 1];
+        if (prev_op == .up_to or prev_op == .star) {
+            find_j -= 1;
+            move_op = prev_op;
+        }
+    }
     patt[find_j] = op;
     find_j += 1;
     while (move_op != .unused) : (find_j += 1) {
@@ -1239,6 +1270,11 @@ fn printPatternInternal(patt: []const RegOp) ?u8 {
             => |op| {
                 std.debug.print("{s} {u}", .{ @tagName(patt[j]), op });
             },
+            .some,
+            .up_to,
+            => |op| {
+                std.debug.print("{s} {d}", .{ @tagName(patt[j]), op });
+            },
             .class,
             .not_class,
             => |op| {
@@ -1357,8 +1393,7 @@ test "match some things" {
 }
 
 test "workshop" {
-    const m_n = compile("(abc){2}").?;
-    printRegex(&m_n);
+    try testMatchAllP("a{3,6}", "aaaaa");
 }
 
 test "iteration" {
