@@ -734,6 +734,25 @@ fn beforePriorLeft(patt: *const [MAX_REGEX_OPS]RegOp, j: usize) usize {
     return find_j;
 }
 
+inline fn countDigits(in: []const u8) usize {
+    var i = 0;
+    while (i < in.len and ascii.isDigit(in[i])) : (i += 1) {}
+    return i;
+}
+
+fn parseByte(in: []const u8) !struct { usize, u8 } {
+    const d1 = countDigits(in);
+    if (d1 == 0 or d1 >= 4) return error.BadString;
+    const c1 = std.fmt.parseInt(u16, in[0..d1]) catch {
+        return error.BadString;
+    };
+    if (c1 >= 254) {
+        logError("repetition counts must fit in a u8, got {d}\n", .{c1});
+        return error.BadString;
+    }
+    return .{ d1, @intCast(c1) };
+}
+
 // TODO this should throw errors
 /// Compile a regex.
 pub fn compile(in: []const u8) ?Regex {
@@ -756,16 +775,15 @@ pub fn compile(in: []const u8) ?Regex {
     }) {
         const c = in[i];
         switch (c) {
-            '$' => {
-                patt[j] = RegOp{ .end = {} };
-            },
             '^' => {
                 patt[j] = RegOp{ .begin = {} };
+            },
+            '$' => {
+                patt[j] = RegOp{ .end = {} };
             },
             '.' => {
                 patt[j] = RegOp{ .dot = {} };
             },
-
             '*' => {
                 if (i + 1 < in.len and in[i + 1] == '?') {
                     i += 1;
@@ -834,6 +852,33 @@ pub fn compile(in: []const u8) ?Regex {
                         bad_string = true;
                         break :dispatch;
                     }
+                }
+            },
+            '{' => {
+                i += 1;
+                const d1, const c1 = parseByte(in[i..]) catch {
+                    bad_string = true;
+                    break :dispatch;
+                };
+                i += d1 + 1;
+                if (XXX) _ = c1;
+                if (in[i] == ',') {
+                    i += 1;
+                    if (in[i] == '}') {
+                        // some and more
+                    }
+                    const d2, const c2 = parseByte(in[i..]) catch {
+                        bad_string = true;
+                        break :dispatch;
+                    };
+                    //
+                    if (XXX) {
+                        _ = d2;
+                        _ = c2;
+                    }
+                } else if (in[i] == '}') {
+                    // fixed amount
+
                 }
             },
             '|' => {
