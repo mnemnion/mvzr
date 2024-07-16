@@ -139,8 +139,8 @@ pub const RegexIterator = struct {
             iter.idx += m[1];
             return Match{
                 .slice = iter.haystack[m1..m2],
-                .start = m[0],
-                .end = m[1],
+                .start = m1,
+                .end = m1,
             };
         } else {
             return null;
@@ -149,7 +149,7 @@ pub const RegexIterator = struct {
 };
 
 /// Match `pattern` in `haystack`.
-pub fn match(haystack: []const u8, pattern: []const u8) ?usize {
+pub fn match(haystack: []const u8, pattern: []const u8) ?struct { usize, usize } {
     const maybe_regex = compile(pattern);
     if (maybe_regex) |regex| {
         return regex.match(haystack);
@@ -381,19 +381,6 @@ fn matchFourPatterns(
     }
 }
 
-fn thisPattern(patt: []const RegOp) struct { bool, []const RegOp } {
-    switch (patt[0]) {
-        .left => return .{ true, sliceGroup(patt) },
-        else => return .{ false, patt[0..1] },
-    }
-}
-
-fn pattEnd(patt: []const RegOp) usize {
-    var j: usize = 0;
-    while (j < patt.len and patt[j] != .unused) : (j += 1) {}
-    return j;
-}
-
 fn matchThreePatterns(
     first: []const RegOp,
     second: []const RegOp,
@@ -421,33 +408,6 @@ fn matchTwoPatterns(
     } else {
         return matchPatternNoAlts(second, sets, haystack);
     }
-}
-
-fn sliceAlt(regex: []const RegOp) []const RegOp {
-    const alt_at = findAlt(regex, 0);
-    if (alt_at) |at| {
-        return regex[0..at];
-    } else unreachable; // verified before dispatch
-}
-
-fn sliceGroup(patt: []const RegOp) []const RegOp {
-    assert(patt[0] == .left);
-    var j: usize = 1;
-    var pump: usize = 0;
-    while (true) : (j += 1) {
-        switch (patt[j]) {
-            .right => {
-                if (pump == 0) {
-                    return patt[1..j];
-                } else {
-                    pump -= 1;
-                }
-            },
-            .left => pump += 1,
-            else => {},
-        }
-    }
-    unreachable;
 }
 
 fn dispatchTwoAlts(patt: []const RegOp, sets: *const CharSets, haystack: []const u8) ?usize {
@@ -502,6 +462,46 @@ fn nextPattern(patt: []const RegOp) usize {
         .left => return findRight(patt, 0) + 1,
         else => return 1,
     }
+}
+
+fn thisPattern(patt: []const RegOp) struct { bool, []const RegOp } {
+    switch (patt[0]) {
+        .left => return .{ true, sliceGroup(patt) },
+        else => return .{ false, patt[0..1] },
+    }
+}
+
+fn sliceAlt(regex: []const RegOp) []const RegOp {
+    const alt_at = findAlt(regex, 0);
+    if (alt_at) |at| {
+        return regex[0..at];
+    } else unreachable; // verified before dispatch
+}
+
+fn sliceGroup(patt: []const RegOp) []const RegOp {
+    assert(patt[0] == .left);
+    var j: usize = 1;
+    var pump: usize = 0;
+    while (true) : (j += 1) {
+        switch (patt[j]) {
+            .right => {
+                if (pump == 0) {
+                    return patt[1..j];
+                } else {
+                    pump -= 1;
+                }
+            },
+            .left => pump += 1,
+            else => {},
+        }
+    }
+    unreachable;
+}
+
+fn pattEnd(patt: []const RegOp) usize {
+    var j: usize = 0;
+    while (j < patt.len and patt[j] != .unused) : (j += 1) {}
+    return j;
 }
 
 // Count alts which aren't in a group
@@ -1039,6 +1039,12 @@ test "match some things" {
     try testMatchAll("\t\n\r\xff\xff", "\t\n\r\xff\xff");
 }
 
+test "workshop" {
+    //
+    const regex_finder_string = "<\\^.+?\\$>";
+    printRegex(&compile(regex_finder_string).?);
+}
+
 test "iteration" {
     var r_iter = compile("foo|bar|baz").?.iterator("foobarbazfoo");
     var matched = r_iter.next().?;
@@ -1050,8 +1056,4 @@ test "iteration" {
     matched = r_iter.next().?;
     try expectEqualStrings("foo", matched.slice);
     try expectEqual(null, r_iter.next());
-}
-
-test "workshop" {
-    //
 }
