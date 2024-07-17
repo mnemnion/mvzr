@@ -219,7 +219,25 @@ fn matchPattern(regex: []const RegOp, set: *const CharSets, haystack: []const u8
 fn matchPatternNoAlts(patt: []const RegOp, sets: *const CharSets, haystack: []const u8) ?OpMatch {
     var i: usize = 0;
     var j: usize = 0;
-    while (j < patt.len and patt[j] != .unused) {
+    dispatch: while (j < patt.len and patt[j] != .unused) {
+        if (i == haystack.len) {
+            if (atEnd(patt, i, j, haystack)) {
+                return OpMatch{ .i = i, .j = j };
+            }
+            switch (patt[j]) {
+                .optional,
+                .star,
+                .lazy_optional,
+                .lazy_star,
+                .eager_optional,
+                .eager_star,
+                => {
+                    j += nextPattern(patt[j..]);
+                    continue :dispatch;
+                },
+                else => return null,
+            }
+        }
         const maybe_match = switch (patt[j]) {
             .dot,
             .class,
@@ -251,7 +269,6 @@ fn matchPatternNoAlts(patt: []const RegOp, sets: *const CharSets, haystack: []co
             j += m.j;
             i += m.i;
             assert(!(i > haystack.len));
-            if (i == haystack.len) break;
         } else {
             return null;
         }
@@ -666,13 +683,19 @@ fn nextPattern(patt: []const RegOp) usize {
         .lazy_star,
         .lazy_optional,
         .lazy_plus,
-        // XXX:
-        // .eager_star,
-        // .eager_plus,
-        // .. is eager optional a thing?
-        // .at_least,
-        // .up_to,
+        .eager_star,
+        .eager_plus,
+        .eager_optional,
+        .up_to,
         => return 1 + nextPattern(patt[1..]),
+        .some => {
+            if (patt[1] == .star or patt[1] == .up_to) {
+                return 1;
+            } else {
+                return 1 + nextPattern(patt[1..]);
+            }
+        },
+        .unused => return 0, // or unreachable idk
         else => return 1,
     }
 }
@@ -797,7 +820,6 @@ fn prefixModifier(patt: *[MAX_REGEX_OPS]RegOp, j: usize, op: RegOp) bool {
                 logError("found a modifier on a modifier", .{});
                 return false;
             }
-            find_j -= 1;
         },
         .right => {
             find_j = beforePriorLeft(patt, find_j);
@@ -1390,10 +1412,12 @@ test "match some things" {
     try testFail("a*+a", "aaaaaaaa");
     try testMatchAll("(aaa)?aaa", "aaa");
     try testFail("(aaa)?+aaa", "aaa");
+    try testMatchAll("ab?", "ab");
+    try testMatchAll("ab?", "a");
 }
 
 test "workshop" {
-    try testMatchAllP("a{3,6}", "aaaaa");
+    //  try testMatchAllP("a{3,6}a", "aaaaa");
 }
 
 test "iteration" {
