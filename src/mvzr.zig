@@ -830,9 +830,15 @@ fn countAlt(patt: []const RegOp) usize {
 
 fn findAlt(patt: []const RegOp, j_in: usize) ?usize {
     var j = j_in;
+    var pump: usize = 0;
     while (j < patt.len) : (j += 1) {
-        if (patt[j] == .alt) {
-            return j;
+        switch (patt[j]) {
+            .left => pump += 1,
+            .right => pump -= 1,
+            .alt => {
+                if (pump == 0) return j;
+            },
+            else => {},
         }
     }
     return null;
@@ -1467,6 +1473,7 @@ test "match some things" {
     try testMatchAll("foo|bar|baz", "baz");
     try testMatchAll("foo|bar|baz|quux+", "quuxxxxx");
     try testMatchAll("foo|bar|baz|bux|quux|quuux|quuuux", "quuuux");
+    try testMatchAll("foo|bar|(baz|bux|quux|quuux)|quuuux", "quuuux");
     try testMatchAll("(abc)+d", "abcabcabcd");
     try testMatchAll("\t\n\r\xff\xff", "\t\n\r\xff\xff");
     try testMatchAll("a+b", "ab");
@@ -1485,7 +1492,7 @@ test "match some things" {
     try testMatchAll("\\w{3,5}bc", "abbbc");
     try testMatchAll("\\w{3,5}", "abb");
     try testMatchAll("^\\w+?$", "glebarg");
-    try testMatchAllP("[A-Za-z]+$", "Pabcex");
+    try testMatchAll("[A-Za-z]+$", "Pabcex");
 }
 test "workshop" {
     //
