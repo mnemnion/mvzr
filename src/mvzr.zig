@@ -91,8 +91,8 @@ const OpMatch = struct {
 const CharSets = [MAX_CHAR_SETS]CharSet;
 
 const Regex = struct {
-    patt: [MAX_REGEX_OPS]RegOp = [1]RegOp{undefined} ** MAX_REGEX_OPS,
-    sets: [MAX_CHAR_SETS]CharSet = [1]CharSet{undefined} ** MAX_CHAR_SETS,
+    patt: [MAX_REGEX_OPS]RegOp = [1]RegOp{.{ .unused = {} }} ** MAX_REGEX_OPS,
+    sets: [MAX_CHAR_SETS]CharSet = [1]CharSet{.{ .low = 0, .hi = 0 }} ** MAX_CHAR_SETS,
 
     /// Match a regex pattern in `haystack`, if found, this returns a `Match`.
     pub fn match(regex: *const Regex, haystack: []const u8) ?Match {
@@ -968,11 +968,6 @@ fn parseHex(in: []const u8) !u8 {
 pub fn compile(in: []const u8) ?Regex {
     var out = Regex{};
     var bad_string: bool = false;
-    @memset(
-        &out.patt,
-        RegOp{ .unused = {} },
-    );
-    @memset(&out.sets, .{ .low = 0, .hi = 0 });
     var patt = &out.patt;
     var sets = &out.sets;
     var i: usize = 0;
@@ -1553,6 +1548,8 @@ test "match some things" {
     try testMatchAll("!{,3}", "!!!");
     try testMatchAll("^\\w+?$", "glebarg");
     try testMatchAll("[A-Za-z]+$", "Pabcex");
+    try testMatchAll("^[^\n]+$", "a single line");
+    try testFail("^[^\n]+$", "several \n lines");
 }
 
 test "workshop" {
