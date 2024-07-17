@@ -16,7 +16,7 @@ This is that library.  It's a simple bytecode-based Commander Pike-style VM.  Le
 - Built-in character groups (ASCII): `\w`, `\W`, `\s`, `\S`, `\d`, `\D`
 - Escape sequences: `\t`, `\n`, `\r`, `\xXX` hex format
 - Begin and end `^` and `$`
-- `{M}`, `{M,}`, `{M,N}`
+- `{M}`, `{M,}`, `{M,N}`, `{,N}`
 
 ## Limitations and Quirks
 
@@ -29,7 +29,6 @@ This is that library.  It's a simple bytecode-based Commander Pike-style VM.  Le
     - Or split into lines first, divide and conquer
 - Backtracks (sorry. For this to work without backtracking, we need async back)
 - Compiler does some best-effort validation but I haven't really pounded on it
-- No min/max `{X,}`, `{X,Y}`.  Might get around to it (escape your curlies just in case)
 - No capture groups.  Divide and conquer
 
 As long as you color within the lines, it should be fine.

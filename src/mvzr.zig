@@ -307,8 +307,8 @@ fn matchOneByte(op: RegOp, sets: *const CharSets, c: u8) bool {
         .not_class => |c_off| !matchClass(sets[c_off], c),
         .digit => ascii.isDigit(c),
         .not_digit => !ascii.isDigit(c),
-        .alpha => ascii.isAlphabetic(c),
-        .not_alpha => !ascii.isAlphabetic(c),
+        .alpha => ascii.isAlphanumeric(c) or c == '_',
+        .not_alpha => (!ascii.isAlphanumeric(c) and !(c == '_')),
         .whitespace => ascii.isWhitespace(c),
         .not_whitespace => !ascii.isWhitespace(c),
         .char => |ch| (c == ch),
@@ -682,10 +682,8 @@ fn nextPatternIndex(patt: []const RegOp) usize {
 fn nextPattern(patt: []const RegOp) []const RegOp {
     switch (patt[0]) {
         .unused, .begin => @panic("Internal error, .unused or .begin encountered"),
-        .end => return patt[1..], // ??? XXX No pattern may follow end.
-        .left => return patternAfterGroup(patt),
-        // XXX is patt[1..] ok here? depends on how group dispatch lands IG.
         .right => @panic("Internal error, encountered .right"),
+        .left => return patternAfterGroup(patt),
         .alt,
         .optional,
         .star,
@@ -699,6 +697,7 @@ fn nextPattern(patt: []const RegOp) []const RegOp {
         .some,
         .up_to,
         => return nextPattern(patt[1..]),
+        .end,
         .dot,
         .char,
         .class,
@@ -896,11 +895,6 @@ fn prefixModifier(patt: *[MAX_REGEX_OPS]RegOp, j: usize, op: RegOp) bool {
         },
         .right => {
             find_j = beforePriorLeft(patt, find_j);
-            // XXX
-            if (op == .some and find_j > 0 and (patt[find_j - 1] == .star or patt[find_j - 1] == .up_to)) {
-                std.debug.print("reached", .{});
-                find_j -= 1;
-            }
         },
         else => {},
     } // find_j is at our insert offset
@@ -961,6 +955,12 @@ fn parseByte(in: []const u8) !struct { usize, u8 } {
         return error.BadString;
     }
     return .{ d1, @intCast(c1) };
+}
+
+fn parseHex(in: []const u8) !u8 {
+    var out_buf: [1]u8 = undefined;
+    const b = try std.fmt.hexToBytes(&out_buf, in[0..2]);
+    return b[0];
 }
 
 // TODO this should throw errors
@@ -1195,13 +1195,12 @@ pub fn compile(in: []const u8) ?Regex {
                         // byte literal
                         'x' => {
                             i += 1;
-                            var out_buf: [1]u8 = undefined;
-                            const b: []u8 = std.fmt.hexToBytes(&out_buf, in[i .. i + 2]) catch {
+                            const b = parseHex(in[i..]) catch {
                                 bad_string = true;
                                 break :dispatch;
                             };
                             i += 1;
-                            patt[j] = RegOp{ .char = b[0] };
+                            patt[j] = RegOp{ .char = b };
                         },
                         else => |ch| {
                             // Others are accepted as escaped, we don't care
@@ -1225,7 +1224,7 @@ pub fn compile(in: []const u8) ?Regex {
                 };
                 i += 1;
                 while (i < in.len and in[i] != ']') : (i += 1) {
-                    if (s > sets.len) {
+                    if (s >= sets.len) {
                         logError("excessive number of character sets\n", .{});
                         bad_string = true;
                         break :dispatch;
@@ -1244,7 +1243,6 @@ pub fn compile(in: []const u8) ?Regex {
                             },
                             '\\' => { // escaped value, we don't care what
                                 // thought I had established that already but ok
-                                // TODO handle \n and such
                                 if (i + 1 < in.len) {
                                     i += 1;
                                     const c2 = in[i];
@@ -1253,9 +1251,44 @@ pub fn compile(in: []const u8) ?Regex {
                                             const cut_c: u6 = @truncate(c2);
                                             low |= one << cut_c;
                                         },
-                                        64...127 => {
+                                        64...109,
+                                        111...113,
+                                        115,
+                                        117,
+                                        118,
+                                        119,
+                                        121...126,
+                                        => {
                                             const cut_c: u6 = @truncate(c2);
                                             hi |= one << cut_c;
+                                        },
+                                        'n' => {
+                                            low |= one << 0x0a; // newline
+                                        },
+                                        't' => {
+                                            low |= one << 0x09; // tab
+                                        },
+                                        'r' => {
+                                            low |= one << 0x0d; // carriage return
+                                        },
+                                        'x' => {
+                                            i += 1;
+                                            const b = parseHex(in[i..]) catch {
+                                                bad_string = true;
+                                                break :dispatch;
+                                            };
+                                            if (b > 127) {
+                                                logError("charsets can't fit {d}\n", .{b});
+                                                bad_string = true;
+                                                break :dispatch;
+                                            }
+                                            i += 1;
+                                            const b_trunc: u6 = @truncate(b);
+                                            switch (b) {
+                                                0...63 => low |= one << b_trunc,
+                                                64...127 => hi |= one << b_trunc,
+                                                else => unreachable,
+                                            }
                                         },
                                         else => {
                                             bad_string = true;
@@ -1265,6 +1298,7 @@ pub fn compile(in: []const u8) ?Regex {
                                 }
                             },
                             else => {
+                                logError("Apologies, but multi=byte characters in sets are not supported.\n", .{});
                                 bad_string = true;
                                 break :dispatch;
                             },
@@ -1348,7 +1382,7 @@ pub fn compile(in: []const u8) ?Regex {
 fn logError(comptime fmt: []const u8, args: anytype) void {
     if (!builtin.is_test) {
         std.log.err(fmt, args);
-    } else { // XXX don't ship this
+    } else {
         std.log.warn(fmt, args);
     }
 }
@@ -1472,7 +1506,7 @@ fn testFail(needle: []const u8, haystack: []const u8) !void {
 test "match some things" {
     try testMatchAll("abc", "abc");
     try testMatchAll("[a-z]", "d");
-    try testMatchAll("\\W\\w", "3a");
+    try testMatchAll("\\W\\w", "!a");
     try testMatchAll("\\w+", "abdcdFG");
     try testMatchAll("a*b+", "aaaaabbbbbbbb");
     try testMatchAll("a?b*", "abbbbb");
@@ -1497,6 +1531,8 @@ test "match some things" {
     try testMatchAll("foo|bar|(baz|bux|quux|quuux)|quuuux", "quuuux");
     try testMatchAll("(abc)+d", "abcabcabcd");
     try testMatchAll("\t\n\r\xff\xff", "\t\n\r\xff\xff");
+    try testMatchAll("[\t\r\n]+", "\t\t\r\r\n\t\n\r");
+    try testMatchAll("[fd\\x03\\x04]+", "f\x03d\x04dfd\x03");
     try testMatchAll("a+b", "ab");
     try testMatchAll("a*aaa", "aaaaaaaaaaaaaa");
     try testMatchAll("\\w+foo", "abcdefoo");
@@ -1518,6 +1554,7 @@ test "match some things" {
     try testMatchAll("^\\w+?$", "glebarg");
     try testMatchAll("[A-Za-z]+$", "Pabcex");
 }
+
 test "workshop" {
     //
 }
