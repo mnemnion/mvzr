@@ -239,7 +239,7 @@ fn matchPatternNoAlts(patt: []const RegOp, sets: *const CharSets, haystack: []co
                 .eager_star,
                 .up_to,
                 => {
-                    j += nextPattern(patt[j..]);
+                    j += nextPatternIndex(patt[j..]);
                     continue :dispatch;
                 },
                 else => return null,
@@ -335,7 +335,7 @@ fn matchStar(patt: []const RegOp, sets: *const CharSets, haystack: []const u8) O
         assert(!(i > haystack.len));
         if (i == haystack.len) break;
     }
-    const next_patt_len = nextPattern(patt);
+    const next_patt_len = nextPatternIndex(patt);
     if (i == haystack.len and !atEnd(patt, i, 1 + next_patt_len, haystack)) {
         // we're not done
         i -= 1;
@@ -348,12 +348,12 @@ fn matchStar(patt: []const RegOp, sets: *const CharSets, haystack: []const u8) O
         &matchPatternNoAlts;
     const maybe_next = next_fn(next_patt, sets, haystack[i..]);
     if (maybe_next) |m2| {
-        return OpMatch{ .i = i + m2.i, .j = 1 + nextPattern(patt) + m2.j };
+        return OpMatch{ .i = i + m2.i, .j = 1 + nextPatternIndex(patt) + m2.j };
     } // otherwise we gotta do the loopback dance.
     while (i != 0) : (i -= 1) {
         const try_next = next_fn(next_patt, sets, haystack[i..]);
         if (try_next) |m2| {
-            return OpMatch{ .i = i + m2.i, .j = 1 + nextPattern(patt) + m2.j };
+            return OpMatch{ .i = i + m2.i, .j = 1 + nextPatternIndex(patt) + m2.j };
         }
     }
     return OpMatch{ .i = 0, .j = 1 + next_patt_len };
@@ -368,7 +368,7 @@ fn matchPlus(patt: []const RegOp, sets: *const CharSets, haystack: []const u8) ?
     const first_m = match_fn(this_patt, sets, haystack);
     if (first_m == null) return null;
     const m1 = first_m.?;
-    if (m1.i == haystack.len) return OpMatch{ .i = m1.i, .j = 1 + nextPattern(patt) };
+    if (m1.i == haystack.len) return OpMatch{ .i = m1.i, .j = 1 + nextPatternIndex(patt) };
     const m2 = matchStar(patt, sets, haystack[m1.i..]);
     return OpMatch{ .i = m1.i + m2.i, .j = m2.j };
 }
@@ -382,7 +382,7 @@ fn matchOptional(patt: []const RegOp, sets: *const CharSets, haystack: []const u
     const maybe_m = match_fn(this_patt, sets, haystack);
     if (maybe_m) |m1| {
         // See if we can succeed here
-        const next_patt = nextPattern(patt);
+        const next_patt = nextPatternIndex(patt);
         var i = m1.i;
         if (i == haystack.len and !atEnd(patt, i, 1 + next_patt, haystack)) {
             // Reset (we still have m1.i)
@@ -390,12 +390,12 @@ fn matchOptional(patt: []const RegOp, sets: *const CharSets, haystack: []const u
         }
         const maybe_next = matchPatternNoAlts(patt[next_patt..], sets, haystack[i..]);
         if (maybe_next) |m2| {
-            return OpMatch{ .i = i + m2.i, .j = 1 + nextPattern(patt) + m2.j };
+            return OpMatch{ .i = i + m2.i, .j = 1 + nextPatternIndex(patt) + m2.j };
         } else {
-            return OpMatch{ .i = 0, .j = 1 + nextPattern(patt) };
+            return OpMatch{ .i = 0, .j = 1 + nextPatternIndex(patt) };
         }
     } else {
-        return OpMatch{ .i = 0, .j = 1 + nextPattern(patt) };
+        return OpMatch{ .i = 0, .j = 1 + nextPatternIndex(patt) };
     }
 }
 
@@ -407,9 +407,9 @@ fn matchEagerOptional(patt: []const RegOp, sets: *const CharSets, haystack: []co
         &matchPatternNoAlts;
     const maybe_m = match_fn(this_patt, sets, haystack);
     if (maybe_m) |m| {
-        return OpMatch{ .i = m.i, .j = 1 + nextPattern(patt) };
+        return OpMatch{ .i = m.i, .j = 1 + nextPatternIndex(patt) };
     } else {
-        return OpMatch{ .i = 0, .j = 1 + nextPattern(patt) };
+        return OpMatch{ .i = 0, .j = 1 + nextPatternIndex(patt) };
     }
 }
 
@@ -432,13 +432,13 @@ fn matchLazyStar(patt: []const RegOp, sets: *const CharSets, haystack: []const u
     var i: usize = 0;
     while (true) {
         if (i == haystack.len)
-            return OpMatch{ .i = i, .j = 1 + nextPattern(patt) };
+            return OpMatch{ .i = i, .j = 1 + nextPatternIndex(patt) };
         const maybe = match_fn(this_patt, sets, haystack[i..]);
         if (maybe) |m1| {
             // let the other guy have some
             i += m1.i;
             if (i == haystack.len)
-                return OpMatch{ .i = i, .j = 1 + nextPattern(patt) };
+                return OpMatch{ .i = i, .j = 1 + nextPatternIndex(patt) };
             const m_next = next_fn(next_patt, sets, haystack[i..]);
             if (m_next) |m2| {
                 // done
@@ -448,7 +448,7 @@ fn matchLazyStar(patt: []const RegOp, sets: *const CharSets, haystack: []const u
             }
         } else {
             // other guy's turn coming up
-            return OpMatch{ .i = i, .j = 1 + nextPattern(patt) };
+            return OpMatch{ .i = i, .j = 1 + nextPatternIndex(patt) };
         }
     }
 }
@@ -462,7 +462,7 @@ fn matchLazyPlus(patt: []const RegOp, sets: *const CharSets, haystack: []const u
     const first_m = match_fn(this_patt, sets, haystack);
     if (first_m == null) return null;
     const m1 = first_m.?;
-    if (m1.i == haystack.len) return OpMatch{ .i = m1.i, .j = 1 + nextPattern(patt) };
+    if (m1.i == haystack.len) return OpMatch{ .i = m1.i, .j = 1 + nextPatternIndex(patt) };
     const m2 = matchLazyStar(patt, sets, haystack[m1.i..]);
     return OpMatch{ .i = m1.i + m2.i, .j = m2.j };
 }
@@ -486,7 +486,7 @@ fn matchEagerPlus(patt: []const RegOp, sets: *const CharSets, haystack: []const 
     const first_m = match_fn(this_patt, sets, haystack);
     if (first_m == null) return null;
     const m1 = first_m.?;
-    if (m1.i == haystack.len) return OpMatch{ .i = m1.i, .j = 1 + nextPattern(patt) };
+    if (m1.i == haystack.len) return OpMatch{ .i = m1.i, .j = 1 + nextPatternIndex(patt) };
     const m2 = matchEagerStar(patt, sets, haystack[m1.i..]);
     return OpMatch{ .i = m1.i + m2.i, .j = m2.j };
 }
@@ -503,7 +503,7 @@ fn matchEagerStar(patt: []const RegOp, sets: *const CharSets, haystack: []const 
         assert(!(i > haystack.len));
         if (i == haystack.len) break;
     }
-    return OpMatch{ .i = i, .j = 1 + nextPattern(patt) };
+    return OpMatch{ .i = i, .j = 1 + nextPatternIndex(patt) };
 }
 
 fn matchSome(patt: []const RegOp, sets: *const CharSets, haystack: []const u8) ?OpMatch {
@@ -525,7 +525,7 @@ fn matchSome(patt: []const RegOp, sets: *const CharSets, haystack: []const u8) ?
             return null;
         }
     }
-    return OpMatch{ .i = i, .j = nextPattern(patt) };
+    return OpMatch{ .i = i, .j = nextPatternIndex(patt) };
 }
 
 fn matchUpTo(patt: []const RegOp, sets: *const CharSets, haystack: []const u8) OpMatch {
@@ -533,7 +533,7 @@ fn matchUpTo(patt: []const RegOp, sets: *const CharSets, haystack: []const u8) O
     if (more_match) |m|
         return m
     else
-        return OpMatch{ .i = 0, .j = 1 + nextPattern(patt[1..]) };
+        return OpMatch{ .i = 0, .j = 1 + nextPatternIndex(patt[1..]) };
 }
 
 fn matchUpToInner(patt: []const RegOp, sets: *const CharSets, haystack: []const u8, count: usize) ?OpMatch {
@@ -549,7 +549,7 @@ fn matchUpToInner(patt: []const RegOp, sets: *const CharSets, haystack: []const 
     const maybe_m = match_fn(this_patt, sets, haystack);
     if (maybe_m) |m1| {
         // See if we can succeed here
-        const next_patt = nextPattern(patt[1..]);
+        const next_patt = nextPatternIndex(patt[1..]);
         var i = m1.i;
         if (i == haystack.len and !atEnd(patt, i, 2 + next_patt, haystack)) {
             // Reset (we still have m1.i)
@@ -559,16 +559,16 @@ fn matchUpToInner(patt: []const RegOp, sets: *const CharSets, haystack: []const 
         if (maybe_next) |m2| {
             if (m2.i == haystack.len) {
                 // can't do anymore here
-                return OpMatch{ .i = m2.i, .j = 1 + next_patt + nextPattern(patt[1..]) };
+                return OpMatch{ .i = m2.i, .j = 1 + next_patt + nextPatternIndex(patt[1..]) };
             }
         }
         const maybe_rest = matchUpToInner(patt, sets, haystack[m1.i..], count - 1);
         if (maybe_rest) |m3| {
-            return OpMatch{ .i = m1.i + m3.i, .j = 1 + next_patt + nextPattern(patt[1..]) };
+            return OpMatch{ .i = m1.i + m3.i, .j = 1 + next_patt + nextPatternIndex(patt[1..]) };
         }
 
         if (maybe_next) |m2| {
-            return OpMatch{ .i = i + m2.i, .j = 1 + nextPattern(patt[1..]) + m2.j };
+            return OpMatch{ .i = i + m2.i, .j = 1 + nextPatternIndex(patt[1..]) + m2.j };
         } else {
             return null;
         }
@@ -679,7 +679,7 @@ fn matchClass(set: CharSet, c: u8) bool {
     }
 }
 
-fn nextPattern(patt: []const RegOp) usize {
+fn nextPatternIndex(patt: []const RegOp) usize {
     switch (patt[0]) {
         .left => return findRight(patt, 0) + 1,
         .star,
@@ -692,12 +692,12 @@ fn nextPattern(patt: []const RegOp) usize {
         .eager_plus,
         .eager_optional,
         .up_to,
-        => return 1 + nextPattern(patt[1..]),
+        => return 1 + nextPatternIndex(patt[1..]),
         .some => {
             if (patt[1] == .star or patt[1] == .up_to) {
                 return 1;
             } else {
-                return 1 + nextPattern(patt[1..]);
+                return 1 + nextPatternIndex(patt[1..]);
             }
         },
         .unused => return 0, // or unreachable idk
