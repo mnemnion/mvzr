@@ -705,6 +705,60 @@ fn nextPatternIndex(patt: []const RegOp) usize {
     }
 }
 
+fn patternNext(patt: []const RegOp) []const RegOp {
+    switch (patt[0]) {
+        .unused, .begin => @panic("Internal error, .unused or .begin encountered"),
+        .end => return patt[0..0], // No pattern may follow end.
+        .left => return patternAfterGroup(patt),
+        // XXX is patt[1..] ok here? depends on how group dispatch lands IG.
+        .right => @panic("Internal error, encountered .right"),
+        .alt,
+        .optional,
+        .star,
+        .plus,
+        .lazy_optional,
+        .lazy_star,
+        .lazy_plus,
+        .eager_optional,
+        .eager_star,
+        .eager_plus,
+        .some,
+        .up_to,
+        => return patternNext(patt[1..]),
+        .dot,
+        .char,
+        .class,
+        .not_class,
+        .digit,
+        .not_digit,
+        .alpha,
+        .not_alpha,
+        .whitespace,
+        .not_whitespace,
+        => return patt[1..],
+    }
+}
+
+fn patternAfterGroup(patt: []const RegOp) []const RegOp {
+    assert(patt[0] == .left);
+    var j: usize = 1;
+    var pump: usize = 0;
+    while (true) : (j += 1) {
+        switch (patt[j]) {
+            .right => {
+                if (pump == 0) {
+                    return patt[j + 1 ..];
+                } else {
+                    pump -= 1;
+                }
+            },
+            .left => pump += 1,
+            else => {},
+        }
+    }
+    unreachable;
+}
+
 fn thisPattern(patt: []const RegOp) struct { bool, []const RegOp } {
     switch (patt[0]) {
         .left => return .{ true, sliceGroup(patt) },
