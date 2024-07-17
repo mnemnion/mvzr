@@ -430,6 +430,8 @@ fn matchLazyStar(patt: []const RegOp, sets: *const CharSets, haystack: []const u
     }
     var i: usize = 0;
     while (true) {
+        if (i == haystack.len)
+            return OpMatch{ .i = i, .j = 1 + nextPattern(patt) };
         const maybe = match_fn(this_patt, sets, haystack[i..]);
         if (maybe) |m1| {
             // let the other guy have some
@@ -461,7 +463,7 @@ fn matchLazyPlus(patt: []const RegOp, sets: *const CharSets, haystack: []const u
     const m1 = first_m.?;
     if (m1.i == haystack.len) return OpMatch{ .i = m1.i, .j = 1 + nextPattern(patt) };
     const m2 = matchLazyStar(patt, sets, haystack[m1.i..]);
-    return OpMatch{ .i = m2.i + m2.i, .j = m2.j };
+    return OpMatch{ .i = m1.i + m2.i, .j = m2.j };
 }
 
 fn matchLazyOptional(patt: []const RegOp, sets: *const CharSets, haystack: []const u8) OpMatch {
@@ -1420,6 +1422,7 @@ test "match some things" {
     try testMatchAll("a{3,4}", "aaaa");
     try testMatchAll("\\w{3,5}bc", "abbbc");
     try testMatchAll("\\w{3,5}", "abb");
+    try testMatchAll("^\\w+?$", "glebarg");
 }
 test "workshop" {
     //
