@@ -122,7 +122,8 @@ const Regex = struct {
     }
 
     fn matchInternal(regex: *const Regex, haystack: []const u8) ?struct { usize, usize } {
-        const patt = regex.patt;
+        const end = findPaternEnd(regex);
+        const patt = regex.patt[0..end];
         switch (patt[0]) {
             .begin => {
                 const matched = matchPattern(patt[1..], &regex.sets, haystack);
@@ -133,7 +134,7 @@ const Regex = struct {
             else => {
                 var matchlen: usize = 0;
                 while (matchlen < haystack.len) : (matchlen += 1) {
-                    const matched = matchPattern(&patt, &regex.sets, haystack[matchlen..]);
+                    const matched = matchPattern(patt, &regex.sets, haystack[matchlen..]);
                     if (matched) |m| {
                         return .{ matchlen, matchlen + m.i };
                     }
@@ -211,13 +212,13 @@ pub fn match(haystack: []const u8, pattern: []const u8) ?Match {
     }
 }
 
-fn matchPattern(regex: []const RegOp, set: *const CharSets, haystack: []const u8) ?OpMatch {
-    switch (countAlt(regex)) {
-        0 => return matchPatternNoAlts(regex, set, haystack),
-        1 => return dispatchTwoAlts(regex, set, haystack),
-        2 => return dispatchThreeAlts(regex, set, haystack),
-        3 => return dispatchFourAlts(regex, set, haystack),
-        else => return dispatchMoreAlts(regex, set, haystack),
+fn matchPattern(patt: []const RegOp, set: *const CharSets, haystack: []const u8) ?OpMatch {
+    switch (countAlt(patt)) {
+        0 => return matchPatternNoAlts(patt, set, haystack),
+        1 => return dispatchTwoAlts(patt, set, haystack),
+        2 => return dispatchThreeAlts(patt, set, haystack),
+        3 => return dispatchFourAlts(patt, set, haystack),
+        else => return dispatchMoreAlts(patt, set, haystack),
     }
 }
 
@@ -711,6 +712,16 @@ fn thisPattern(patt: []const RegOp) struct { bool, []const RegOp } {
     }
 }
 
+fn findPaternEnd(regex: *const Regex) usize {
+    const patt = regex.patt;
+    for (0..patt.len) |i| {
+        if (patt[i] == .unused) {
+            return i;
+        }
+    }
+    return patt.len;
+}
+
 fn sliceAlt(regex: []const RegOp) []const RegOp {
     const alt_at = findAlt(regex, 0);
     if (alt_at) |at| {
@@ -720,6 +731,7 @@ fn sliceAlt(regex: []const RegOp) []const RegOp {
 
 fn sliceGroup(patt: []const RegOp) []const RegOp {
     assert(patt[0] == .left);
+
     var j: usize = 1;
     var pump: usize = 0;
     while (true) : (j += 1) {
@@ -1267,6 +1279,7 @@ fn logError(comptime fmt: []const u8, args: anytype) void {
 
 //| TESTS
 
+const testing = std.testing;
 const expect = std.testing.expect;
 const expectEqual = std.testing.expectEqual;
 const expectEqualStrings = std.testing.expectEqualStrings;
@@ -1423,9 +1436,11 @@ test "match some things" {
     try testMatchAll("\\w{3,5}bc", "abbbc");
     try testMatchAll("\\w{3,5}", "abb");
     try testMatchAll("^\\w+?$", "glebarg");
+    try testMatchAll("[A-Za-z]$", "Pabcex");
 }
 test "workshop" {
     //
+    try testMatchAll("\\w+", "abdcdFG");
 }
 
 test "iteration" {
