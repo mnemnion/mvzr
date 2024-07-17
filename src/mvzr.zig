@@ -178,6 +178,21 @@ pub const Match = struct {
     pub fn deinit(matched: Match, allocator: std.mem.Allocator) void {
         allocator.free(matched.slice);
     }
+
+    pub fn format(
+        matched: Match,
+        comptime fmt: []const u8,
+        options: std.fmt.FormatOptions,
+        writer: anytype,
+    ) !void {
+        _ = fmt;
+        _ = options;
+        try writer.print("[{d}..{d}]: \"{}\"", .{
+            matched.start,
+            matched.end,
+            std.zig.fmtEscapes(matched.slice),
+        });
+    }
 };
 
 pub const RegexIterator = struct {
@@ -981,9 +996,17 @@ pub fn compile(in: []const u8) ?Regex {
         const c = in[i];
         switch (c) {
             '^' => {
+                if (i != 0) {
+                    bad_string = true;
+                    break :dispatch;
+                }
                 patt[j] = RegOp{ .begin = {} };
             },
             '$' => {
+                if (i + 1 < in.len) {
+                    bad_string = true;
+                    break :dispatch;
+                }
                 patt[j] = RegOp{ .end = {} };
             },
             '.' => {
@@ -1199,9 +1222,8 @@ pub fn compile(in: []const u8) ?Regex {
                         },
                         else => |ch| {
                             // Others are accepted as escaped, we don't care
-                            // if they're special, you're not special, you're
-                            // not my dad, you get the regex you give
-                            // TODO ok fine, we need to handle like, \n here
+                            // if they're special, you're not special, I'm no
+                            // your dad, you get the regex you give
                             patt[j] = RegOp{ .char = ch };
                         },
                     }
