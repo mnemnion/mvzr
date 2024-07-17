@@ -172,6 +172,11 @@ pub const Match = struct {
             .end = matched.end,
         };
     }
+
+    /// For freeing copied Match structs created with `toOwned`.
+    pub fn deinit(matched: Match, allocator: std.mem.Allocator) void {
+        allocator.free(matched.slice);
+    }
 };
 
 pub const RegexIterator = struct {
@@ -1411,9 +1416,13 @@ test "match some things" {
     try testFail("(aaa)?+aaa", "aaa");
     try testMatchAll("ab?", "ab");
     try testMatchAll("ab?", "a");
+    try testMatchAll("a{3,6}a", "aaaaaa");
+    try testMatchAll("a{3,4}", "aaaa");
+    try testMatchAll("\\w{3,5}bc", "abbbc");
+    try testMatchAll("\\w{3,5}", "abb");
 }
 test "workshop" {
-    try testMatchAllP("a{3,6}a", "aaaaaa");
+    //
 }
 
 test "iteration" {
@@ -1438,4 +1447,6 @@ test "comptime regex" {
     const comp_regex = comptime compile("foo+").?;
     const run_match = comp_regex.match("foofoofoo");
     try expect(run_match != null);
+    const comptime_match = comptime comp_regex.match("foofoofoo");
+    try expect(comptime_match != null);
 }
