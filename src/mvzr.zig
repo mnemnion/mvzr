@@ -509,7 +509,7 @@ fn matchUpTo(patt: []const RegOp, sets: *const CharSets, haystack: []const u8) O
 }
 
 fn matchUpToInner(patt: []const RegOp, sets: *const CharSets, haystack: []const u8, count: usize) ?OpMatch {
-    if (count == 2) { // Last try is an optional
+    if (count == 1) { // Last try is an optional
         const opt = matchOptional(patt, sets, haystack);
         return opt; // suss
     }
@@ -520,16 +520,18 @@ fn matchUpToInner(patt: []const RegOp, sets: *const CharSets, haystack: []const 
         // See if we can succeed here
         const next_patt = nextPattern(patt);
         var i = m1.i;
-        if (next_patt.len == 0) return m1;
-        if (i == haystack.len) {
-            // Reset (we still have m1.i)
-            i = 0;
-        }
-        const maybe_next = matchPattern(next_patt, sets, haystack[i..]);
-        if (maybe_next) |m2| {
-            if (m2.i + i == haystack.len) {
-                // As far as it goes
-                return OpMatch{ .i = i + m2.i, .j = m2.j };
+        var maybe_next: ?OpMatch = null;
+        if (next_patt.len != 0) {
+            if (i == haystack.len) {
+                // Reset (we still have m1.i)
+                i = 0;
+            }
+            maybe_next = matchPattern(next_patt, sets, haystack[i..]);
+            if (maybe_next) |m2| {
+                if (m2.i + i == haystack.len) {
+                    // As far as it goes
+                    return OpMatch{ .i = i + m2.i, .j = m2.j };
+                }
             }
         }
         const maybe_rest = matchUpToInner(patt, sets, haystack[m1.i..], count - 1);
@@ -1062,11 +1064,30 @@ pub fn compile(in: []const u8) ?Regex {
                     }
                 }
             },
-            '{' => { // {M,N} etc.
+            '{' => { // {M,N} etc, or just character literal is fine
                 i += 1;
+                if (in[i] == ',') { // {,?
+                    i += 1;
+                    const d, const c1 = parseByte(in[i..]) catch {
+                        bad_string = true;
+                        break :dispatch;
+                    };
+                    i += d;
+                    if (in[i] == '}') { // {,N}
+                        const ok = prefixModifier(patt, j, RegOp{ .up_to = c1 });
+                        if (!ok) {
+                            bad_string = true;
+                            break :dispatch;
+                        } else continue :dispatch;
+                    } else {
+                        bad_string = true;
+                        break :dispatch;
+                    }
+                }
                 const d1, const c1 = parseByte(in[i..]) catch {
-                    bad_string = true;
-                    break :dispatch;
+                    // This is fine, literal `}`
+                    patt[j] = RegOp{ .char = '}' };
+                    continue :dispatch;
                 };
                 i += d1;
                 if (in[i] == ',') { // {M,?
@@ -1487,10 +1508,13 @@ test "match some things" {
     try testFail("(aaa)?+aaa", "aaa");
     try testMatchAll("ab?", "ab");
     try testMatchAll("ab?", "a");
-    try testMatchAll("a{3,6}a", "aaaaaa");
-    try testMatchAll("a{3,4}", "aaaa");
+    try testMatchAll("^a{3,6}a", "aaaaaa");
+    try testMatchAll("^a{3,4}", "aaaa");
+    try testMatchAll("^a{3,5}", "aaaaa");
+    try testMatchAll("^a{3,5}", "aaa");
     try testMatchAll("\\w{3,5}bc", "abbbc");
     try testMatchAll("\\w{3,5}", "abb");
+    try testMatchAll("!{,3}", "!!!");
     try testMatchAll("^\\w+?$", "glebarg");
     try testMatchAll("[A-Za-z]+$", "Pabcex");
 }
