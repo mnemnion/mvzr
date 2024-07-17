@@ -231,6 +231,7 @@ fn matchPatternNoAlts(patt: []const RegOp, sets: *const CharSets, haystack: []co
                 .lazy_star,
                 .eager_optional,
                 .eager_star,
+                .up_to,
                 => {
                     j += nextPattern(patt[j..]);
                     continue :dispatch;
@@ -516,59 +517,55 @@ fn matchSome(patt: []const RegOp, sets: *const CharSets, haystack: []const u8) ?
             return null;
         }
     }
-    return OpMatch{ .i = i, .j = 1 + nextPattern(patt) };
+    return OpMatch{ .i = i, .j = nextPattern(patt) };
 }
 
-fn matchUpTo(patt: []const RegOp, sets: *const CharSets, haystack: []const u8) ?OpMatch {
-    const count = patt[0].up_to;
-    return matchUpToInner(patt[1..], sets, haystack, count);
+fn matchUpTo(patt: []const RegOp, sets: *const CharSets, haystack: []const u8) OpMatch {
+    const more_match = matchUpToInner(patt, sets, haystack, patt[0].up_to);
+    if (more_match) |m|
+        return m
+    else
+        return OpMatch{ .i = 0, .j = 1 + nextPattern(patt[1..]) };
 }
 
 fn matchUpToInner(patt: []const RegOp, sets: *const CharSets, haystack: []const u8, count: usize) ?OpMatch {
-    // Base case:
-    if (count == 0) { // Take the next pattern or backtrack
-        const next_patt_len = nextPattern(patt);
-        const next_patt = patt[next_patt_len..];
-        const next_fn = if (findAlt(next_patt, 0)) |_|
-            &matchPattern
-        else
-            &matchPatternNoAlts;
-        const maybe_next = next_fn(next_patt, sets, haystack);
-        if (maybe_next) |m2| {
-            return OpMatch{ .i = m2.i, .j = 1 + nextPattern(patt) + m2.j };
-        } else {
-            return null; // Try again down below
-        }
+    if (count == 2) { // Last try is an optional
+        const opt = matchOptional(patt[1..], sets, haystack);
+        return opt; // suss
     }
-    // Recursive case
-    const group, const this_patt = thisPattern(patt);
+    const group, const this_patt = thisPattern(patt[1..]);
     const match_fn = if (group)
         &matchPattern
     else
         &matchPatternNoAlts;
-    var i: usize = 0;
-    const first_m = match_fn(this_patt, sets, haystack);
-    if (first_m) |m1| {
-        i += m1.i;
-    } else {
-        return OpMatch{ .i = 0, .j = nextPattern(patt) };
-    }
-    const next_match = matchUpToInner(patt, sets, haystack[i..], count - 1);
-    if (next_match) |m2| {
-        return OpMatch{ .i = i + m2.i, .j = nextPattern(patt) };
-    } else { // Try the next pattern
-        const next_patt_len = nextPattern(patt);
-        const next_patt = patt[next_patt_len..];
-        const next_fn = if (findAlt(next_patt, 0)) |_|
-            &matchPattern
-        else
-            &matchPatternNoAlts;
-        const maybe_next = next_fn(next_patt, sets, haystack[i..]);
-        if (maybe_next) |m2| {
-            return OpMatch{ .i = i + m2.i, .j = 1 + nextPattern(patt) + m2.j };
-        } else {
-            return null; // Try again up stack
+    const maybe_m = match_fn(this_patt, sets, haystack);
+    if (maybe_m) |m1| {
+        // See if we can succeed here
+        const next_patt = nextPattern(patt[1..]);
+        var i = m1.i;
+        if (i == haystack.len and !atEnd(patt, i, 2 + next_patt, haystack)) {
+            // Reset (we still have m1.i)
+            i = 0;
         }
+        const maybe_next = matchPatternNoAlts(patt[1 + next_patt ..], sets, haystack[i..]);
+        if (maybe_next) |m2| {
+            if (m2.i == haystack.len) {
+                // can't do anymore here
+                return OpMatch{ .i = m2.i, .j = 1 + next_patt + nextPattern(patt[1..]) };
+            }
+        }
+        const maybe_rest = matchUpToInner(patt, sets, haystack[m1.i..], count - 1);
+        if (maybe_rest) |m3| {
+            return OpMatch{ .i = m1.i + m3.i, .j = 1 + next_patt + nextPattern(patt[1..]) };
+        }
+
+        if (maybe_next) |m2| {
+            return OpMatch{ .i = i + m2.i, .j = 1 + nextPattern(patt[1..]) + m2.j };
+        } else {
+            return null;
+        }
+    } else {
+        return null;
     }
 }
 
@@ -1415,9 +1412,8 @@ test "match some things" {
     try testMatchAll("ab?", "ab");
     try testMatchAll("ab?", "a");
 }
-
 test "workshop" {
-    //  try testMatchAllP("a{3,6}a", "aaaaa");
+    try testMatchAllP("a{3,6}a", "aaaaaa");
 }
 
 test "iteration" {
