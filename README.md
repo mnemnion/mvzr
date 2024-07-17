@@ -56,4 +56,4 @@ while (iter.next()) |m| {
 
 ## Bugs
 
-I wrote this thing in ~~two~~ three days flat (check the log).  There are bugs.  Point them out and I might even fix them.
+Fewer over time, I hope.  This library isn't up to `0.1` yet, but the test suite never shrinks.
