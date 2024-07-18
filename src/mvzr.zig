@@ -52,9 +52,9 @@ pub const RegOp = union(RegexType) {
     unused: void,
     begin: void,
     end: void,
-    left: void,
-    right: void,
-    alt: void,
+    left: void, // TODO add offset u8
+    right: void, // TODO add head-match offset
+    alt: void, // TODO add offset u8
     optional: void,
     star: void,
     plus: void,
@@ -596,11 +596,46 @@ fn matchUpToInner(patt: []const RegOp, sets: *const CharSets, haystack: []const 
 
 fn matchGroup(patt: []const RegOp, sets: *const CharSets, haystack: []const u8) ?OpMatch {
     const inner_patt = sliceGroup(patt);
-    // TODO store the alt count on .left and dispatch directly from here.
-    const maybe_matched = matchPatternGroup(inner_patt, sets, haystack);
-    if (maybe_matched) |m| {
-        // TODO optimization: patt[inner_patt.len + 2..]
-        return OpMatch{ .i = m.i, .j = nextPattern(patt) };
+    // Match up to first success.
+    const did_match = switch (countAlt(inner_patt)) {
+        0 => matchPattern(inner_patt, sets, haystack),
+        1 => dispatchTwoAlts(inner_patt, sets, haystack),
+        2 => dispatchThreeAlts(inner_patt, sets, haystack),
+        else => dispatchFourAlts(inner_patt, sets, haystack),
+        // else => dispatchMoreAlts(inner_patt, sets, haystack),
+    };
+    if (did_match) |m1| {
+        const next_patt = nextPattern(patt);
+        if (next_patt.len == 0) {
+            // may as well reuse that
+            return OpMatch{ .i = m1.i, .j = next_patt };
+        }
+        var next_match = matchPattern(next_patt, sets, haystack);
+        if (next_match) |m2| {
+            return OpMatch{ .i = m1.i + m2.i, .j = m2.j };
+        } else {
+            var remaining_patt = m1.j;
+            while (remaining_patt.len != 0) {
+                const remaining_match = switch (countAlt(remaining_patt)) {
+                    0 => matchPattern(remaining_patt, sets, haystack),
+                    1 => dispatchTwoAlts(remaining_patt, sets, haystack),
+                    2 => dispatchThreeAlts(remaining_patt, sets, haystack),
+                    else => dispatchFourAlts(remaining_patt, sets, haystack),
+                    // else => dispatchMoreAlts(remaining_patt, sets, haystack),
+                };
+                if (remaining_match) |m3| {
+                    next_match = matchPattern(next_patt, sets, haystack);
+                    if (next_match) |m_final| {
+                        return OpMatch{ .i = m3.i + m_final.i, .j = m_final.j };
+                    } else if (remaining_patt.len == 0) {
+                        return null;
+                    } else {
+                        remaining_patt = m3.j;
+                    }
+                }
+            }
+            return null;
+        }
     } else {
         return null;
     }
@@ -1632,21 +1667,20 @@ test "match some things" {
     try testMatchAll("(a*?)*aa", "aaa");
     // MD5 hash
     try testMatchAll("^[a-f0-9]{32}", "0800fc577294c34e0b28ad2839435945");
+    try testMatchAll("employ(er|ee|ment|ing|able)", "employee");
+    try testMatchAll("employ(er|ee|ment|ing|able)", "employer");
+    try testMatchAll("employ(er|ee|ment|ing|able)", "employment");
 }
 
 test "workshop" {
     //
     //try testMatchAll("^\\w*?abc", "qqqqabc");
-    try testMatchAll("foo|bar|baz", "bar");
+    try testMatchAll("employ(er|ee|ment|ing|able)", "employable");
+    try testMatchAll("employ(er|ee|ment|ing|able)", "employing");
 }
 
 test "badblood" {
     printRegexString("(abc){5,7}?");
-    try testMatchAll("employ(er|ee|ment|ing|able)", "employee");
-    try testMatchAll("employ(er|ee|ment|ing|able)", "employer");
-    try testMatchAll("employ(er|ee|ment|ing|able)", "employment");
-    try testMatchAll("employ(er|ee|ment|ing|able)", "employing");
-    try testMatchAll("employ(er|ee|ment|ing|able)", "employable");
     try testMatchAll("employ(|er|ee|ment|ing|able)", "employ");
     try testMatchAll("employ(|er|ee|ment|ing|able)$", "employee");
     try testMatchAll("(abc){3,5}?$", "abcabcabcabcabcabc");
