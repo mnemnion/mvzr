@@ -969,6 +969,43 @@ fn findRight(patt: []const RegOp, j_in: usize) usize {
     unreachable;
 }
 
+//| COMPILER
+
+/// (Attempts to) compile a Regex with a decidedly large default of 4K
+/// operations and 256 character sets, returning `.{ops, sets}`, representing
+/// the minimum necessary `SizedRegex(ops, sets)` for this pattern.  The
+/// string provided must be comptime-known.  Since the values returned are
+/// themselves only usable at comptime, it is suggested this function only
+/// be used to tune the size of a regex during development, rather than
+/// called pointlessly every time the program is compiled.
+///
+/// Note that if you run out of character sets in this function, you're out of
+/// luck, that limit is a hard one.  Regexen with more than 4k operations are
+/// possible, if you ever find a useful one.
+pub fn resourcesNeeded(comptime in: []const u8) struct { comptime_int, comptime_int } {
+    const maybe_out = compile_regex(SizedRegex(4096, 1024), in);
+    var max_s: usize = 0;
+    if (maybe_out) |out| {
+        for (&out.patt, 0..) |op, i| {
+            switch (op) {
+                .class, .not_class => |s_off| {
+                    max_s = @max(max_s, s_off);
+                },
+                .unused => {
+                    if (max_s >= 255) {
+                        @compileError("Maximum character sets is 256 (must fit in a u8)");
+                    }
+                    return .{ i, max_s + 1 };
+                },
+                else => {},
+            }
+        }
+    } else {
+        return .{ 0, 0 };
+    }
+    return .{ 0, 0 };
+}
+
 /// Move modifiers to prefix position.
 fn prefixModifier(patt: []RegOp, j: usize, op: RegOp) bool {
     if (j == 0 or patt[j] == .begin) return false;
@@ -1089,43 +1126,20 @@ fn parseHex(in: []const u8) !u8 {
     return b[0];
 }
 
-pub fn compile(in: []const u8) ?Regex {
-    return compile_regex(Regex, in);
+fn findSetIndex(sets: []const CharSet, set: CharSet, s: usize) u8 {
+    // We deal with excessive offsets elsewhere
+    const trunc_s: u8 = @truncate(s);
+    var idx: u8 = 0;
+    while (idx < trunc_s) : (idx += 1) {
+        if (sets[idx].low == set.low and sets[idx].hi == set.hi) {
+            return idx;
+        }
+    }
+    return trunc_s;
 }
 
-/// (Attempts to) compile a Regex with a decidedly large default of 4K
-/// operations and 256 character sets, returning `.{ops, sets}`, representing
-/// the minimum necessary `SizedRegex(ops, sets)` for this pattern.  The
-/// string provided must be comptime-known.  Since the values returned are
-/// themselves only usable at comptime, it is suggested this function only
-/// be used to tune the size of a regex during development, rather than
-/// called pointlessly every time the program is compiled.
-///
-/// Note that if you run out of character sets in this function, you're out of
-/// luck, that limit is a hard one.  Regexen with more than 4k operations are
-/// possible, if you ever find a useful one.
-pub fn resourcesNeeded(comptime in: []const u8) struct { comptime_int, comptime_int } {
-    const maybe_out = compile_regex(SizedRegex(4096, 1024), in);
-    var max_s: usize = 0;
-    if (maybe_out) |out| {
-        for (&out.patt, 0..) |op, i| {
-            switch (op) {
-                .class, .not_class => |s_off| {
-                    max_s = @max(max_s, s_off);
-                },
-                .unused => {
-                    if (max_s >= 255) {
-                        @compileError("Maximum character sets is 256 (must fit in a u8)");
-                    }
-                    return .{ i, max_s + 1 };
-                },
-                else => {},
-            }
-        }
-    } else {
-        return .{ 0, 0 };
-    }
-    return .{ 0, 0 };
+pub fn compile(in: []const u8) ?Regex {
+    return compile_regex(Regex, in);
 }
 
 // TODO this should throw errors
@@ -1383,19 +1397,14 @@ fn compile_regex(RegexT: type, in: []const u8) ?RegexT {
                 // character set
                 var low: u64 = 0;
                 var hi: u64 = 0;
-                const this_op: RegOp = which: {
+                const this_kind: RegexType = which: {
                     if (i + 1 < in.len and in[i + 1] == '^') {
                         i += 1;
-                        break :which RegOp{ .not_class = s };
-                    } else break :which RegOp{ .class = s };
+                        break :which .not_class;
+                    } else break :which .class;
                 };
                 i += 1;
                 while (i < in.len and in[i] != ']') : (i += 1) {
-                    if (s >= sets.len) {
-                        logError("Ran out of character sets (use bigger SizedRegex(ops, sets++)\n", .{});
-                        bad_string = true;
-                        break :dispatch;
-                    }
                     const c1 = in[i];
                     if (i + 1 < in.len and in[i + 1] != '-') {
                         // normal character class
@@ -1516,9 +1525,22 @@ fn compile_regex(RegexT: type, in: []const u8) ?RegexT {
                     bad_string = true;
                     break :dispatch;
                 }
-                sets[s] = CharSet{ .low = low, .hi = hi };
-                s += 1;
-                patt[j] = this_op;
+                const set = CharSet{ .low = low, .hi = hi };
+                const this_s = findSetIndex(sets, set, s);
+                if (this_s >= sets.len) {
+                    logError("Ran out of character sets (use bigger SizedRegex(ops, sets++)\n", .{});
+                    bad_string = true;
+                    break :dispatch;
+                }
+                sets[this_s] = set;
+                if (this_s == s) {
+                    s += 1;
+                }
+                if (this_kind == .class) {
+                    patt[j] = RegOp{ .class = this_s };
+                } else if (this_kind == .not_class) {
+                    patt[j] = RegOp{ .not_class = this_s };
+                } else unreachable;
             },
             else => |ch| { // regular ol' character
                 patt[j] = RegOp{ .char = ch };
@@ -1774,6 +1796,9 @@ test "match some things" {
     try testMatchAll("employ(er|ee|ment|ing|able)", "employing");
     try testMatchAll("employ(|er|ee|ment|ing|able)", "employ");
     try testMatchAll("employ(|er|ee|ment|ing|able)$", "employee");
+    // https://github.com/mnemnion/mvzr/issues/1#issuecomment-2235265209
+    try testMatchAll("[0-9]{4}", "1951");
+    try testMatchAll("(0[1-9]|1[012])[\\/](0[1-9]|[12][0-9]|3[01])[\\/][0-9]{4}", "10/12/1951");
     // non-catastropic backtracking #1
     try testFail("(a+a+)+b", "a" ** 2048);
     // non-catastropic backtracking #2
@@ -1784,7 +1809,7 @@ test "match some things" {
 
 test "Get the char sets you asked for" { // https://github.com/mnemnion/mvzr/issues/1#issuecomment-2235265209
     const test_patt = "(0[1-9]|1[012])[\\/](0[1-9]|[12][0-9]|3[01])[\\/][0-9]{4}";
-    const j, const s = resourcesNeeded("(0[1-9]|1[012])[\\/](0[1-9]|[12][0-9]|3[01])[\\/][0-9]{4}");
+    const j, const s = resourcesNeeded(test_patt);
     const ProperSize = SizedRegex(j, s);
     const haystack = "10/12/1951";
     const bigger_regex = ProperSize.compile(test_patt).?;
@@ -1795,7 +1820,6 @@ test "Get the char sets you asked for" { // https://github.com/mnemnion/mvzr/iss
 test "workshop" {
     //  ^(.*?,){11}P
     //try testMatchAll("^\\w*?abc", "qqqqabc");
-    try testMatchAll("[0-9]{4}", "1951");
 }
 
 test "badblood" {
