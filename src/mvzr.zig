@@ -1356,14 +1356,8 @@ fn compileRegex(RegexT: type, in: []const u8) ?RegexT {
                             patt[j] = RegOp{ .not_whitespace = {} };
                         },
                         // character escapes
-                        'r' => {
-                            patt[j] = RegOp{ .char = 0x0d };
-                        },
-                        'n' => {
-                            patt[j] = RegOp{ .char = 0x0a };
-                        },
-                        't' => {
-                            patt[j] = RegOp{ .char = 0x09 };
+                        'r', 'n', 't' => {
+                            patt[j] = RegOp{ .char = valueFor(in[i..]).? };
                         },
                         // byte literal
                         'x' => {
@@ -1426,6 +1420,25 @@ const w_LOW_MASK = d_MASK;
 const s_MASK: u64 = 0x0000000100003e00; // low
 const ALL_MASK: u64 = ~@as(u64, 0);
 
+fn valueFor(in: []const u8) ?u8 {
+    switch (in[0]) {
+        't' => return '\t',
+        'n' => return '\n',
+        'r' => return '\r',
+        'w', 'W', 's', 'S', 'd', 'D' => return null,
+        'x' => {
+            if (in.len >= 3) {
+                return parseHex(in[1..4]) catch return null;
+            } else {
+                // ??? probably malformed but not... yet?
+                return 'x';
+            }
+        },
+        128...255 => return null,
+        else => return in[0],
+    }
+}
+
 fn parseCharSet(in: []const u8, patt: []RegOp, sets: []CharSet, j: usize, i_in: usize, s_in: u8) !struct { usize, u8 } {
     var i = i_in;
     var s = s_in;
@@ -1439,7 +1452,25 @@ fn parseCharSet(in: []const u8, patt: []RegOp, sets: []CharSet, j: usize, i_in: 
     };
     i += 1;
     while (i < in.len and in[i] != ']') : (i += 1) {
-        const c1 = in[i];
+        // An escape might be a range:
+        const c1 = which: {
+            if (in[i] == '\\') {
+                const may_b = valueFor(in[i + 1 ..]);
+                if (may_b) |b| {
+                    if (in[i + 1] == 'x') {
+                        i += 3; // \ + x + 2 digits
+                    } else {
+                        i += 1; // \? for all other ?
+                    }
+                    break :which b;
+                } else {
+                    // handle normal stuff later
+                    break :which in[1];
+                }
+            } else {
+                break :which in[i];
+            }
+        };
         if (i + 1 < in.len and in[i + 1] != '-') {
             // normal character class
             switch (c1) {
@@ -1482,15 +1513,15 @@ fn parseCharSet(in: []const u8, patt: []RegOp, sets: []CharSet, j: usize, i_in: 
                             'D' => {
                                 low |= ~d_MASK;
                                 hi |= ALL_MASK;
-                            },
+                            }, // TODO these might be unreachable now, kcov it
                             'n' => {
-                                low |= one << 0x0a; // newline
+                                low |= one << '\n';
                             },
                             't' => {
-                                low |= one << 0x09; // tab
+                                low |= one << '\t';
                             },
                             'r' => {
-                                low |= one << 0x0d; // carriage return
+                                low |= one << '\r';
                             },
                             'x' => {
                                 i += 1;
@@ -1530,14 +1561,26 @@ fn parseCharSet(in: []const u8, patt: []RegOp, sets: []CharSet, j: usize, i_in: 
                         i += 1; // we get one from the while loop
                         break :which in[i + 1];
                     } else if (i + 3 < in.len) {
-                        i += 2; // likewise
-                        break :which in[i + 2];
+                        // try for somthing valid
+                        const may_b = valueFor(in[i + 2 ..]);
+                        if (may_b) |b| {
+                            if (in[i + 2] == 'x') {
+                                i += 4; // \ + x + 2 digits
+                            } else {
+                                i += 2; // \? for all other ?
+                            }
+                            break :which b;
+                        } else { // I've decided this is a `\`
+                            i += 1; // let the dang chips fall
+                            break :which in[i + 1];
+                        }
                     } else {
-                        // what to do here? don't care, have a 0
-                        break :which 0; // that'll show ya
+                        // I guess it's a `\`, and we're almost out of room?
+                        break :which '\\';
+                        // For now. This will break later
                     }
                 };
-                if (c1 < c_end + 1) {
+                if (c1 <= c_end) {
                     for (c1..c_end + 1) |c_range| {
                         switch (c_range) {
                             0...63 => {
@@ -1554,6 +1597,7 @@ fn parseCharSet(in: []const u8, patt: []RegOp, sets: []CharSet, j: usize, i_in: 
                         }
                     }
                 } else {
+                    logError("Invalid range: '{u}' > '{u}'\n", .{ c1, c_end });
                     return BadString;
                 }
             } else { // '-' in set, value is 45 so
@@ -1795,6 +1839,7 @@ test "match some things" {
     try testFail("^[^\n]+$", "several \n lines");
     // Empty stuff
     try testFail("[]+", "abc");
+    try testFail("[]", "a");
     try testMatchAll("abc()d", "abcd");
     try testMatchAll("abc(|||)d", "abcd");
     // No infinite loops
@@ -1819,14 +1864,23 @@ test "match some things" {
     try testMatchAll("employ(|er|ee|ment|ing|able)$", "employee");
     // Character escaping
     try testMatchAll("\\$\\.\\(\\)\\*\\+\\?\\[\\\\]\\^\\{\\|\\}", "$.()*+?[\\]^{|}");
+    try testMatchAll("[\\x41-\\x5a]+", "ABCDEFGHIJKLMNOPQRSTUVWXYZ");
     // Again, without the doubled backslashes;
     const test_escapes =
         \\\$\.\(\)\*\+\?\[\\]\^\{\|\}
     ;
     try testMatchAll(test_escapes, "$.()*+?[\\]^{|}");
+    // Character classes in character sets
+    try testMatchAll("[^\\Wf]+", "YyIcMy9Z");
+    try testFail("[^\\Wf]+$", "YyIcMy9Zf");
+    try testMatchAll("[\\x48-\\x4c$]+", "HIJ$KL");
+    try testMatchAll("[^^]+", "abXdea!@#$!%$#$%$&$");
+    try testFail("^[^^]+", "^abXdea!@#$!%$#$%$&$");
+
     // https://github.com/mnemnion/mvzr/issues/1#issuecomment-2235265209
     try testMatchAll("[0-9]{4}", "1951");
     try testMatchAll("(0[1-9]|1[012])[\\/](0[1-9]|[12][0-9]|3[01])[\\/][0-9]{4}", "10/12/1951");
+    try testMatchAll("[\\x09]", "\t");
     // non-catastropic backtracking #1
     try testFail("(a+a+)+b", "a" ** 2048);
     // non-catastropic backtracking #2
@@ -1835,10 +1889,7 @@ test "match some things" {
     try testFail("^(.*?,){254}P", "12345," ** 255);
 }
 
-test "workshop" {
-    //  ^(.*?,){11}P
-    //try testMatchAll("^\\w*?abc", "qqqqabc");
-}
+test "workshop" {}
 
 test "badblood" {
     // printRegexString("(abc){3,5}?$");
@@ -1847,6 +1898,7 @@ test "badblood" {
 test "Get the char sets you asked for" { // https://github.com/mnemnion/mvzr/issues/1#issuecomment-2235265209
     const test_patt = "(0[1-9]|1[012])[\\/](0[1-9]|[12][0-9]|3[01])[\\/][0-9]{4}";
     const j, const s = resourcesNeeded(test_patt);
+    try expectEqual(6, s); // Deduplicated from 9
     const ProperSize = SizedRegex(j, s);
     const haystack = "10/12/1951";
     const bigger_regex = ProperSize.compile(test_patt).?;
