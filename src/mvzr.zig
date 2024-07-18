@@ -167,7 +167,7 @@ pub fn SizedRegex(ops: comptime_int, char_sets: comptime_int) type {
             const patt = regex.patt[0..end];
             switch (patt[0]) {
                 .begin => {
-                    const matched = matchPatternWithAlt(patt[1..], &regex.sets, haystack);
+                    const matched = matchOuterPattern(patt[1..], &regex.sets, haystack);
                     if (matched) |m| {
                         return .{ 0, m.i };
                     } else return null;
@@ -175,7 +175,7 @@ pub fn SizedRegex(ops: comptime_int, char_sets: comptime_int) type {
                 else => {
                     var matchlen: usize = 0;
                     while (matchlen < haystack.len) : (matchlen += 1) {
-                        const matched = matchPatternWithAlt(patt, &regex.sets, haystack[matchlen..]);
+                        const matched = matchOuterPattern(patt, &regex.sets, haystack[matchlen..]);
                         if (matched) |m| {
                             return .{ matchlen, matchlen + m.i };
                         }
@@ -247,19 +247,26 @@ pub fn match(haystack: []const u8, pattern: []const u8) ?Match {
     }
 }
 
-fn matchPatternWithAlt(patt: []const RegOp, set: *const CharSets, haystack: []const u8) ?OpMatch {
-    const did_match = switch (countAlt(patt)) {
-        0 => matchPattern(patt, set, haystack),
-        1 => dispatchTwoAlts(patt, set, haystack),
-        2 => dispatchThreeAlts(patt, set, haystack),
-        3 => dispatchFourAlts(patt, set, haystack),
-        else => dispatchMoreAlts(patt, set, haystack),
-    };
-    if (did_match) |m| {
-        // Strip our remainder
-        return OpMatch{ .i = m.i, .j = patt[0..0] };
-    } else {
-        return null;
+fn matchOuterPattern(patt: []const RegOp, sets: *const CharSets, haystack: []const u8) ?OpMatch {
+    if (findAlt(patt, 0)) |_| {
+        // There's at least one alt.
+        var remaining_patt = patt;
+        while (true) {
+            const this_match = matchAlt(remaining_patt, sets, haystack);
+            if (this_match) |m1| {
+                // Matched
+                return OpMatch{ .i = m1.i, .j = patt[0..0] };
+            } else {
+                const maybe_next = maybeAlt(remaining_patt);
+                if (maybe_next) |next_patt| {
+                    remaining_patt = remaining_patt[next_patt.len + 1 ..];
+                } else { // Ran out of pattern
+                    return null;
+                }
+            }
+        }
+    } else { // No alt.
+        return matchPattern(patt, sets, haystack);
     }
 }
 
@@ -701,7 +708,7 @@ fn dispatchMoreAlts(patt: []const RegOp, sets: *const CharSets, haystack: []cons
         // groups return what they don't eat
         return OpMatch{ .i = m1.i, .j = patt[first.len + 1 ..] };
     } // This is inefficient for now, but I have a plan!
-    return matchPatternWithAlt(patt[first.len + 1 ..], sets, haystack);
+    return matchOuterPattern(patt[first.len + 1 ..], sets, haystack);
 }
 
 fn matchClass(set: CharSet, c: u8) bool {
@@ -972,6 +979,7 @@ fn countAlt(patt: []const RegOp) usize {
     return alts;
 }
 
+/// Answer if there's an alt in the (outermost) pattern.
 fn findAlt(patt: []const RegOp, j_in: usize) ?usize {
     var j = j_in;
     var pump: usize = 0;
