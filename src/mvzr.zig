@@ -1385,7 +1385,7 @@ fn compile_regex(RegexT: type, in: []const u8) ?RegexT {
                 i += 1;
                 while (i < in.len and in[i] != ']') : (i += 1) {
                     if (s >= sets.len) {
-                        logError("excessive number of character sets\n", .{});
+                        logError("Ran out of character sets (use bigger SizedRegex(ops, sets++)\n", .{});
                         bad_string = true;
                         break :dispatch;
                     }
@@ -1519,7 +1519,7 @@ fn compile_regex(RegexT: type, in: []const u8) ?RegexT {
         }
     } // end :dispatch
     if (j == patt.len and i < in.len) {
-        logError("Ran out of regex slots before reached end of pattern\n", .{});
+        logError("Ran out of regex operations (use bigger SizedRegex(ops++, sets)\n", .{});
         return null;
     }
     if (pump != 0) {
