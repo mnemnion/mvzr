@@ -2,16 +2,16 @@
 
 Finding myself in need of a regular expressions library for a Zig project, and needing it to build regex at runtime, not just comptime, I ended up speedrunning a little library for just that purpose.
 
-This is that library.  It's a simple bytecode-based Commander Pike-style VM.  Less than 1500 lines of load-bearing code, no dependencies other than `std`.
+This is that library.  It's a simple bytecode-based Commander Pike-style VM.  Less than 1600 lines of load-bearing code, no dependencies other than `std`.
 
-The provided Regex type allows 64 'operations' and 8 ASCII character sets.  If you would like more, or less, you can call `SizedRegex(num_ops, num_sets)` to customize the type.
+The provided Regex type allows 64 'operations' and 8 unique ASCII character sets.  If you would like more, or less, you can call `SizedRegex(num_ops, num_sets)` to customize the type.
 
 ## Installation
 
 Drop the file into your project, or use the Zig build system:
 
 ```zig
-zig fetch --save "https://github.com/mnemnion/mvzr/archive/refs/tags/v0.0.9.tar.gz"
+zig fetch --save "https://github.com/mnemnion/mvzr/archive/refs/tags/v0.0.10.tar.gz"
 ```
 
 I'll do my best to keep that URL fresh, but it pays to check over here: ➔
