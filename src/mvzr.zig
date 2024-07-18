@@ -872,7 +872,12 @@ fn hasAlt(patt: []const RegOp) bool {
     while (j < patt.len - 1) : (j += 1) {
         switch (patt[j]) {
             .left => pump += 1,
-            .right => pump -= 1,
+            .right => {
+                if (pump == 0)
+                    return true
+                else
+                    pump -= 1;
+            },
             .alt => {
                 if (pump == 0) return true;
             },
@@ -1727,6 +1732,12 @@ test "match some things" {
     try testMatchAll("\\w{3,5}bc", "abbbc");
     try testMatchAll("\\w{3,5}", "abb");
     try testMatchAll("!{,3}", "!!!");
+    try testMatchAll("abc(def(ghi)jkl)mno", "abcdefghijklmno");
+    try testMatchAll("abc(def(ghi?)jkl)mno", "abcdefghijklmno");
+    try testMatchAll("abc(def(ghi)?jkl)mno", "abcdefjklmno");
+    try testMatchAll("abc(def(ghi?)jkl)mno", "abcdefghjklmno");
+    try testFail("abc(def(ghi?)jkl)mno", "abcdefjklmno");
+    try testMatchAll("abc(def((ghi)?)jkl)mno", "abcdefjklmno");
     try testMatchAll("(abc){5}?", "abcabcabcabcabc");
     try testMatchAll("(abc){3,5}?", "abcabcabcabcabc");
     try testMatchAll("^\\w+?$", "glebarg");
