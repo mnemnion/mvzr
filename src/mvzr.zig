@@ -358,7 +358,7 @@ fn matchStar(patt: []const RegOp, sets: *const CharSets, haystack: []const u8) O
     while (matchPattern(this_patt, sets, haystack[i..])) |m| {
         i += m.i;
         assert(!(i > haystack.len));
-        if (i == haystack.len) break; // Might need to walk it back
+        if (i == haystack.len or i == 0) break; // Might need to walk it back
     }
 
     const next_patt = nextPattern(patt);
@@ -531,8 +531,12 @@ fn matchSome(patt: []const RegOp, sets: *const CharSets, haystack: []const u8) ?
         } else {
             return null;
         }
-    } // Unusually, we have to slice manually here, nextPattern would skip an .up_to or .star
-    return OpMatch{ .i = i, .j = patt[1..] };
+    } // We may need to slice manually
+    if (patt[1] == .up_to or patt[1] == .star) {
+        return OpMatch{ .i = i, .j = patt[1..] };
+    } else {
+        return OpMatch{ .i = i, .j = nextPattern(patt) };
+    }
 }
 
 fn matchUpTo(patt: []const RegOp, sets: *const CharSets, haystack: []const u8) OpMatch {
@@ -688,7 +692,7 @@ fn matchClass(set: CharSet, c: u8) bool {
     }
 }
 
-fn nextPatternIndex(patt: []const RegOp) usize {
+fn nextPatternForSome(patt: []const RegOp) usize {
     switch (patt[0]) {
         .left => return findRight(patt, 0) + 1,
         .star,
@@ -701,12 +705,12 @@ fn nextPatternIndex(patt: []const RegOp) usize {
         .eager_plus,
         .eager_optional,
         .up_to,
-        => return 1 + nextPatternIndex(patt[1..]),
+        => return 1 + nextPatternForSome(patt[1..]),
         .some => {
             if (patt[1] == .star or patt[1] == .up_to) {
                 return 1;
             } else {
-                return 1 + nextPatternIndex(patt[1..]);
+                return 1 + nextPatternForSome(patt[1..]);
             }
         },
         .unused => return 0, // or unreachable idk
@@ -771,6 +775,10 @@ fn patternAfterGroup(patt: []const RegOp) []const RegOp {
 fn thisPattern(patt: []const RegOp) []const RegOp {
     switch (patt[0]) {
         .left => return sliceGroup(patt),
+        // This function is not called from modifier position by construction,
+        // Except for .optional followed by .some, .sometimes, which needs
+        // this:
+        .some => return patt[0..nextPatternForSome(patt)],
         else => return patt[0..1],
     }
 }
@@ -896,47 +904,58 @@ fn findRight(patt: []const RegOp, j_in: usize) usize {
 
 /// Move modifiers to prefix position.
 fn prefixModifier(patt: []RegOp, j: usize, op: RegOp) bool {
+    if (j == 0) return false;
     var find_j = j - 1;
-    // If we already have a modifier, two are not kosher:
+    // travel back before last group
     switch (patt[find_j]) {
-        .begin,
-        .end,
-        .left,
-        .alt,
-        .optional,
-        .plus,
-        .lazy_optional,
-        .lazy_star,
-        .lazy_plus,
-        .eager_optional,
-        .eager_star,
-        .eager_plus,
-        .some,
-        => {
-            logError("found a modifier on a modifier", .{});
-            return false;
-        }, // Allowed for {M,} and {M,N} purposes
-        .star => {
-            if (op != .some) {
-                logError("found a modifier on a modifier", .{});
-                return false;
-            }
-        },
-        .up_to => {
-            if (op != .some) {
-                logError("found a modifier on a modifier", .{});
-                return false;
-            }
-        },
         .right => {
             find_j = beforePriorLeft(patt, find_j);
         },
         else => {},
-    } // find_j is at our insert offset
+    }
+    // If we already have a modifier, two are not kosher:
+    if (find_j > 0) {
+        switch (patt[find_j - 1]) {
+            .alt,
+            .plus,
+            .lazy_optional,
+            .lazy_star,
+            .lazy_plus,
+            .eager_optional,
+            .eager_star,
+            .eager_plus,
+            .optional,
+            => {
+                logError("found a modifier on a modifier", .{});
+                return false;
+            }, // Allowed for {M,} and {M,N} purposes
+            .some => {
+                if (op != .optional) {
+                    logError("found a modifier on a modifier", .{});
+                    return false;
+                } else {
+                    find_j -= 1;
+                }
+            },
+            .star => {
+                if (op != .some) {
+                    logError("found a modifier on a modifier", .{});
+                    return false;
+                }
+            },
+            .up_to => {
+                if (op != .some) {
+                    logError("found a modifier on a modifier", .{});
+                    return false;
+                }
+            },
+            else => {},
+        } // find_j is at our insert offset
+    }
     var move_op = patt[find_j];
     if (op == .some and find_j > 0) {
         const prev_op = patt[find_j - 1];
-        if (prev_op == .up_to or prev_op == .star) {
+        if (prev_op == .up_to or prev_op == .star or prev_op == .optional) {
             find_j -= 1;
             move_op = prev_op;
         }
@@ -1034,9 +1053,9 @@ pub fn resourcesNeeded(comptime in: []const u8) struct { usize, usize } {
 /// Compile a regex.
 fn compile_regex(RegexT: type, in: []const u8) ?RegexT {
     var out = RegexT{};
-    var bad_string: bool = false;
     var patt = out.patt[0..];
     var sets = out.sets[0..];
+    var bad_string: bool = false;
     var i: usize = 0;
     var j: usize = 0;
     var s: u8 = 0;
@@ -1455,7 +1474,6 @@ fn logError(comptime fmt: []const u8, args: anytype) void {
         std.log.warn(fmt, args);
     }
 }
-
 //| TESTS
 
 const testing = std.testing;
@@ -1582,6 +1600,7 @@ test "match some things" {
     try testMatchAll("a?b*", "bbbbbb");
     try testMatchAll("a*", "aaaaa");
     try testFail("a+", "b");
+    try testMatchAll("a?", "a");
     try testMatchAll("^\\w*?abc", "qqqqabc");
     // Fail if pattern isn't complete
     try testFail("^\\w*?abcd", "qqqqabc");
@@ -1620,17 +1639,22 @@ test "match some things" {
     try testMatchAll("\\w{3,5}bc", "abbbc");
     try testMatchAll("\\w{3,5}", "abb");
     try testMatchAll("!{,3}", "!!!");
+    try testMatchAll("(abc){5}?", "abcabcabcabcabc");
     try testMatchAll("^\\w+?$", "glebarg");
     try testMatchAll("[A-Za-z]+$", "Pabcex");
     try testMatchAll("^[^\n]+$", "a single line");
     try testFail("^[^\n]+$", "several \n lines");
+    // Empty stuff
+    try testFail("[]+", "abc");
+    try testMatchAll("abc()d", "abcd");
+    try testMatchAll("abc(|||)d", "abcd");
+    // No infinite loops
+    try testMatchAll("(a*?)*aa", "aaa");
 }
 
 test "workshop" {
     //
-    const j, const s = resourcesNeeded("abcd[123][a-f]").?;
-    printRegex(&compile("abcd[123][a-f]").?);
-    std.debug.print("needs {d} operations and {d} charsets", .{ j, s });
+    //try testMatchAll("^\\w*?abc", "qqqqabc");
 }
 
 test "iteration" {
