@@ -88,8 +88,6 @@ const OpMatch = struct {
     i: usize,
 };
 
-const CharSets = [MAX_CHAR_SETS]CharSet;
-
 const Regex: type = SizedRegex(MAX_REGEX_OPS, MAX_CHAR_SETS);
 
 pub fn SizedRegex(ops: comptime_int, char_sets: comptime_int) type {
@@ -1139,8 +1137,8 @@ pub fn compile(in: []const u8) ?Regex {
 /// Compile a regex.
 fn compile_regex(RegexT: type, in: []const u8) ?RegexT {
     var out = RegexT{};
-    var patt = out.patt[0..];
-    var sets = out.sets[0..];
+    var patt = &out.patt;
+    const sets = &out.sets;
     var bad_string: bool = false;
     var i: usize = 0;
     var j: usize = 0;
@@ -1388,157 +1386,10 @@ fn compile_regex(RegexT: type, in: []const u8) ?RegexT {
             },
             '[' => {
                 // character set
-                var low: u64 = 0;
-                var hi: u64 = 0;
-                const this_kind: RegexType = which: {
-                    if (i + 1 < in.len and in[i + 1] == '^') {
-                        i += 1;
-                        break :which .not_class;
-                    } else break :which .class;
+                i, s = parseCharSet(in, patt, sets, j, i, s) catch {
+                    bad_string = true;
+                    break :dispatch;
                 };
-                i += 1;
-                while (i < in.len and in[i] != ']') : (i += 1) {
-                    const c1 = in[i];
-                    if (i + 1 < in.len and in[i + 1] != '-') {
-                        // normal character class
-                        switch (c1) {
-                            0...63 => {
-                                const cut_c: u6 = @truncate(c1);
-                                low |= one << cut_c;
-                            },
-                            64...91, 93...127 => {
-                                const cut_c: u6 = @truncate(c1);
-                                hi |= one << cut_c;
-                            },
-                            '\\' => { // escaped value, we don't care what
-                                // thought I had established that already but ok
-                                if (i + 1 < in.len) {
-                                    i += 1;
-                                    const c2 = in[i];
-                                    switch (c2) {
-                                        0...63 => {
-                                            const cut_c: u6 = @truncate(c2);
-                                            low |= one << cut_c;
-                                        },
-                                        64...109,
-                                        111...113,
-                                        115,
-                                        117,
-                                        118,
-                                        119,
-                                        121...126,
-                                        => {
-                                            const cut_c: u6 = @truncate(c2);
-                                            hi |= one << cut_c;
-                                        },
-                                        'n' => {
-                                            low |= one << 0x0a; // newline
-                                        },
-                                        't' => {
-                                            low |= one << 0x09; // tab
-                                        },
-                                        'r' => {
-                                            low |= one << 0x0d; // carriage return
-                                        },
-                                        'x' => {
-                                            i += 1;
-                                            const b = parseHex(in[i..]) catch {
-                                                bad_string = true;
-                                                break :dispatch;
-                                            };
-                                            if (b > 127) {
-                                                logError("charsets can't fit {d}\n", .{b});
-                                                bad_string = true;
-                                                break :dispatch;
-                                            }
-                                            i += 1;
-                                            const b_trunc: u6 = @truncate(b);
-                                            switch (b) {
-                                                0...63 => low |= one << b_trunc,
-                                                64...127 => hi |= one << b_trunc,
-                                                else => unreachable,
-                                            }
-                                        },
-                                        else => {
-                                            bad_string = true;
-                                            break;
-                                        },
-                                    }
-                                }
-                            },
-                            else => {
-                                logError("Apologies, but multi=byte characters in sets are not supported.\n", .{});
-                                bad_string = true;
-                                break :dispatch;
-                            },
-                        }
-                    } else {
-                        // if paired, it's a range
-                        if (i + 2 < in.len and in[i + 2] != ']') {
-                            const c_end = which: {
-                                if (in[i + 2] != '\\') {
-                                    i += 1; // we get one from the while loop
-                                    break :which in[i + 1];
-                                } else if (i + 3 < in.len) {
-                                    i += 2; // likewise
-                                    break :which in[i + 2];
-                                } else {
-                                    // what to do here? don't care, have a 0
-                                    break :which 0; // that'll show ya
-                                }
-                            };
-                            if (c1 < c_end + 1) {
-                                for (c1..c_end + 1) |c_range| {
-                                    switch (c_range) {
-                                        0...63 => {
-                                            const cut_c: u6 = @truncate(c_range);
-                                            low |= one << cut_c;
-                                        },
-                                        64...127 => {
-                                            const cut_c: u6 = @truncate(c_range);
-                                            hi |= one << cut_c;
-                                        },
-                                        else => {
-                                            bad_string = true;
-                                            break :dispatch;
-                                        },
-                                    }
-                                }
-                            } else {
-                                bad_string = true;
-                                break :dispatch;
-                            }
-                        } else { // '-' in set, value is 45 so
-                            const cut_hyphen: u6 = @truncate('-');
-                            low |= one << cut_hyphen;
-                        }
-                    }
-                } // end while
-                if (i == in.len or in[i] != ']') {
-                    bad_string = true;
-                    break :dispatch;
-                }
-                const set = CharSet{ .low = low, .hi = hi };
-                const this_s = findSetIndex(sets, set, s);
-                if (this_s >= sets.len) {
-                    logError("Ran out of character sets (use bigger SizedRegex(ops, sets++)\n", .{});
-                    bad_string = true;
-                    break :dispatch;
-                }
-                sets[this_s] = set;
-                if (this_s == s) {
-                    if (s == 255) {
-                        logError("Passed the hard 256 limit on charsets. Cannot compile.\n", .{});
-                        bad_string = true;
-                        break :dispatch;
-                    }
-                    s += 1;
-                }
-                if (this_kind == .class) {
-                    patt[j] = RegOp{ .class = this_s };
-                } else if (this_kind == .not_class) {
-                    patt[j] = RegOp{ .not_class = this_s };
-                } else unreachable;
             },
             else => |ch| { // regular ol' character
                 patt[j] = RegOp{ .char = ch };
@@ -1564,6 +1415,147 @@ fn compile_regex(RegexT: type, in: []const u8) ?RegexT {
         return null;
     }
     return out;
+}
+
+const BadString = error.BadString;
+
+fn parseCharSet(in: []const u8, patt: []RegOp, sets: []CharSet, j: usize, i_in: usize, s_in: u8) !struct { usize, u8 } {
+    var i = i_in;
+    var s = s_in;
+    var low: u64 = 0;
+    var hi: u64 = 0;
+    const this_kind: RegexType = which: {
+        if (i + 1 < in.len and in[i + 1] == '^') {
+            i += 1;
+            break :which .not_class;
+        } else break :which .class;
+    };
+    i += 1;
+    while (i < in.len and in[i] != ']') : (i += 1) {
+        const c1 = in[i];
+        if (i + 1 < in.len and in[i + 1] != '-') {
+            // normal character class
+            switch (c1) {
+                0...63 => {
+                    const cut_c: u6 = @truncate(c1);
+                    low |= one << cut_c;
+                },
+                64...91, 93...127 => {
+                    const cut_c: u6 = @truncate(c1);
+                    hi |= one << cut_c;
+                },
+                '\\' => { // escaped value, we don't care what
+                    // thought I had established that already but ok
+                    if (i + 1 < in.len) {
+                        i += 1;
+                        const c2 = in[i];
+                        switch (c2) {
+                            0...63 => {
+                                const cut_c: u6 = @truncate(c2);
+                                low |= one << cut_c;
+                            },
+                            'n' => {
+                                low |= one << 0x0a; // newline
+                            },
+                            't' => {
+                                low |= one << 0x09; // tab
+                            },
+                            'r' => {
+                                low |= one << 0x0d; // carriage return
+                            },
+                            'x' => {
+                                i += 1;
+                                const b = parseHex(in[i..]) catch return BadString;
+                                if (b > 127) {
+                                    logError("charsets can't fit {d}\n", .{b});
+                                    return BadString;
+                                }
+                                i += 1;
+                                const b_trunc: u6 = @truncate(b);
+                                switch (b) {
+                                    0...63 => low |= one << b_trunc,
+                                    64...127 => hi |= one << b_trunc,
+                                    else => unreachable,
+                                }
+                            },
+                            128...255 => {
+                                return BadString;
+                            },
+                            else => {
+                                const cut_c: u6 = @truncate(c2);
+                                hi |= one << cut_c;
+                            },
+                        }
+                    }
+                },
+                else => {
+                    logError("Apologies, but multi=byte characters in sets are not supported.\n", .{});
+                    return BadString;
+                },
+            }
+        } else {
+            // if paired, it's a range
+            if (i + 2 < in.len and in[i + 2] != ']') {
+                const c_end = which: {
+                    if (in[i + 2] != '\\') {
+                        i += 1; // we get one from the while loop
+                        break :which in[i + 1];
+                    } else if (i + 3 < in.len) {
+                        i += 2; // likewise
+                        break :which in[i + 2];
+                    } else {
+                        // what to do here? don't care, have a 0
+                        break :which 0; // that'll show ya
+                    }
+                };
+                if (c1 < c_end + 1) {
+                    for (c1..c_end + 1) |c_range| {
+                        switch (c_range) {
+                            0...63 => {
+                                const cut_c: u6 = @truncate(c_range);
+                                low |= one << cut_c;
+                            },
+                            64...127 => {
+                                const cut_c: u6 = @truncate(c_range);
+                                hi |= one << cut_c;
+                            },
+                            else => {
+                                return BadString;
+                            },
+                        }
+                    }
+                } else {
+                    return BadString;
+                }
+            } else { // '-' in set, value is 45 so
+                const cut_hyphen: u6 = @truncate('-');
+                low |= one << cut_hyphen;
+            }
+        }
+    } // end while
+    if (i == in.len or in[i] != ']') {
+        return BadString;
+    }
+    const set = CharSet{ .low = low, .hi = hi };
+    const this_s = findSetIndex(sets, set, s);
+    if (this_s >= sets.len) {
+        logError("Ran out of character sets (use bigger SizedRegex(ops, sets++)\n", .{});
+        return BadString;
+    }
+    sets[this_s] = set;
+    if (this_s == s) {
+        if (s == 255) {
+            logError("Passed the hard 256 limit on charsets. Cannot compile.\n", .{});
+            return BadString;
+        }
+        s += 1;
+    }
+    if (this_kind == .class) {
+        patt[j] = RegOp{ .class = this_s };
+    } else if (this_kind == .not_class) {
+        patt[j] = RegOp{ .not_class = this_s };
+    } else unreachable;
+    return .{ i, s };
 }
 
 fn logError(comptime fmt: []const u8, args: anytype) void {
