@@ -708,7 +708,7 @@ fn nextPatternForSome(patt: []const RegOp) usize {
         => return 1 + nextPatternForSome(patt[1..]),
         .some => {
             if (patt[1] == .star or patt[1] == .up_to) {
-                return 1;
+                return 2 + nextPatternForSome(patt[2..]);
             } else {
                 return 1 + nextPatternForSome(patt[1..]);
             }
@@ -944,7 +944,12 @@ fn prefixModifier(patt: []RegOp, j: usize, op: RegOp) bool {
                 }
             },
             .up_to => {
-                if (op != .some) {
+                if (op == .optional) {
+                    find_j -= 1;
+                    if (find_j > 0 and patt[find_j - 1] == .some) {
+                        find_j -= 1;
+                    }
+                } else if (op != .some) {
                     logError("found a modifier on a modifier", .{});
                     return false;
                 }
@@ -1496,6 +1501,13 @@ fn printRegex(regex: anytype) void {
     }
 }
 
+fn printRegexString(in: []const u8) void {
+    const reggie = compile(in);
+    if (reggie) |RRRRRR| {
+        printRegex(&RRRRRR);
+    }
+}
+
 fn printPatternInternal(patt: []const RegOp) ?u8 {
     var j: usize = 0;
     var set_max: ?u8 = null;
@@ -1640,6 +1652,7 @@ test "match some things" {
     try testMatchAll("\\w{3,5}", "abb");
     try testMatchAll("!{,3}", "!!!");
     try testMatchAll("(abc){5}?", "abcabcabcabcabc");
+    try testMatchAll("(abc){3,5}?", "abcabcabcabcabc");
     try testMatchAll("^\\w+?$", "glebarg");
     try testMatchAll("[A-Za-z]+$", "Pabcex");
     try testMatchAll("^[^\n]+$", "a single line");
@@ -1655,6 +1668,8 @@ test "match some things" {
 test "workshop" {
     //
     //try testMatchAll("^\\w*?abc", "qqqqabc");
+    printRegexString("(abc){5,7}?");
+    try testMatchAll("(abc){3,5}?$", "abcabcabcabcabcabc");
 }
 
 test "iteration" {
