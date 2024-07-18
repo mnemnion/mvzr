@@ -672,45 +672,6 @@ fn matchAlt(patt: []const RegOp, sets: *const CharSets, haystack: []const u8) ?O
     }
 }
 
-fn dispatchTwoAlts(patt: []const RegOp, sets: *const CharSets, haystack: []const u8) ?OpMatch {
-    const first = sliceAlt(patt);
-    const one_m = matchPattern(first, sets, haystack);
-    if (one_m) |m1| {
-        // groups return what they don't eat
-        return OpMatch{ .i = m1.i, .j = patt[first.len + 1 ..] };
-    }
-    return matchPattern(patt[first.len + 1 ..], sets, haystack);
-}
-
-fn dispatchThreeAlts(patt: []const RegOp, sets: *const CharSets, haystack: []const u8) ?OpMatch {
-    const first = sliceAlt(patt);
-    const one_m = matchPattern(first, sets, haystack);
-    if (one_m) |m1| {
-        // groups return what they don't eat
-        return OpMatch{ .i = m1.i, .j = patt[first.len + 1 ..] };
-    }
-    return dispatchTwoAlts(patt[first.len + 1 ..], sets, haystack);
-}
-fn dispatchFourAlts(patt: []const RegOp, sets: *const CharSets, haystack: []const u8) ?OpMatch {
-    const first = sliceAlt(patt);
-    const one_m = matchPattern(first, sets, haystack);
-    if (one_m) |m1| {
-        // groups return what they don't eat
-        return OpMatch{ .i = m1.i, .j = patt[first.len + 1 ..] };
-    }
-    return dispatchThreeAlts(patt[first.len + 1 ..], sets, haystack);
-}
-
-fn dispatchMoreAlts(patt: []const RegOp, sets: *const CharSets, haystack: []const u8) ?OpMatch {
-    const first = sliceAlt(patt);
-    const one_m = matchPattern(first, sets, haystack);
-    if (one_m) |m1| {
-        // groups return what they don't eat
-        return OpMatch{ .i = m1.i, .j = patt[first.len + 1 ..] };
-    } // This is inefficient for now, but I have a plan!
-    return matchOuterPattern(patt[first.len + 1 ..], sets, haystack);
-}
-
 fn matchClass(set: CharSet, c: u8) bool {
     switch (c) {
         0...63 => {
@@ -895,14 +856,7 @@ fn findPatternEnd(regex: *const Regex) usize {
     return patt.len;
 }
 
-// XXX remove
-fn sliceAlt(patt: []const RegOp) []const RegOp {
-    const alt_at = findAlt(patt, 0);
-    if (alt_at) |at| {
-        return patt[0..at];
-    } else unreachable; // verified before dispatch
-}
-
+/// Return the first alt, if there is one.
 fn maybeAlt(patt: []const RegOp) ?[]const RegOp {
     const alt_at = findAlt(patt, 0);
     if (alt_at) |at| {
@@ -910,7 +864,7 @@ fn maybeAlt(patt: []const RegOp) ?[]const RegOp {
     } else return null;
 }
 
-/// Returns if a group (must be a group!) has an alt.
+/// Test if a group (must be a group!) has an alt.
 fn hasAlt(patt: []const RegOp) bool {
     assert(patt[0] == .left); // We'll use this for a speedup later
     var pump: usize = 0;
