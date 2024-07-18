@@ -4,9 +4,25 @@ Finding myself in need of a regular expressions library for a Zig project, and n
 
 This is that library.  It's a simple bytecode-based Commander Pike-style VM.  Less than 1500 lines of load-bearing code, no dependencies other than `std`.
 
+The provided Regex type allows 64 'operations' and 8 ASCII character sets.  If you would like more, or less, you can call `SizedRegex(num_ops, num_sets)` to customize the type.
+
+## Installation
+
+Drop the file into your project, or use the Zig build system:
+
+```zig
+zig fetch --save "https://github.com/mnemnion/mvzr/archive/refs/tags/v0.0.8.tar.gz"
+```
+
+I'll do my best to keep that URL fresh, but it pays to check over here: ➔
+
+For the latest release version.
+
 ## Features
 
 - Zero allocation, comptime and runtime compiling and matching
+- X operations per regex
+- Y character sets per regex
 - Greedy qualifiers: `*`, `+`, `?`
 - Lazy qualifiers: `*?`, `+?`, `??`
 - Possessive/eager qualifiers: `*+`, `++`, `?+`
@@ -20,9 +36,6 @@ This is that library.  It's a simple bytecode-based Commander Pike-style VM.  Le
 
 ## Limitations and Quirks
 
-- Only 64 operations per regex
-- Only 8 character sets per regex (ASCII only)
-    - These values could probably be made comptime-configurable, but I didn't
 - No Unicode support to speak of
 - No fancy modifiers (you want case-insensitive, great, lowercase your string)
 - `.` matches any one byte.  `[^\n\r]` works fine if that's not what you want
@@ -42,7 +55,9 @@ Much like managing your own memory, if you know your tools and are smart about i
 `mvzr.Regex` is available at `comptime` or runtime, and returns an `mvzr.Match`, consisting of a `.slice` field containing the match, as well as the `.start` and `.end` locations in the haystack.  This is a borrowed slice, to own it, call `match.toOwned(allocator)`, and deallocate later with `match.deinit(allocator)`, or just free the `.slice`.
 
 ```zig
+// aka SizedRegex(64, 8)
 const regex: mvzr.Regex = mvzr.compile(patt_str).?;
+// or mvzr.Regex.compile(patt_str)
 const match: mvzr.Match = regex.match(haystack).?;
 const match2: mvzr.Match = match(haystack, patt_str).?;
 const did_match: bool = regex.isMatch(haystack);
@@ -51,6 +66,12 @@ const iter: mvzr.RegexIterator = regex.iterator(haystack);
 while (iter.next()) |m| {
     // ...
 }
+
+// Comptime-only
+const ops, const sets = mvzr.resourcesNeeded("abc?d*[^efgh]++2");
+
+// I suggest adding the values directly here once they're established
+const SlimmedDownRegex = mvzr.SizedRegex(ops, sets);
 ```
 
 ## Bugs

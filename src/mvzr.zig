@@ -90,70 +90,112 @@ const OpMatch = struct {
 
 const CharSets = [MAX_CHAR_SETS]CharSet;
 
-const Regex = struct {
-    patt: [MAX_REGEX_OPS]RegOp = [1]RegOp{.{ .unused = {} }} ** MAX_REGEX_OPS,
-    sets: [MAX_CHAR_SETS]CharSet = [1]CharSet{.{ .low = 0, .hi = 0 }} ** MAX_CHAR_SETS,
+const Regex: type = SizedRegex(MAX_REGEX_OPS, MAX_CHAR_SETS);
 
-    /// Match a regex pattern in `haystack`, if found, this returns a `Match`.
-    pub fn match(regex: *const Regex, haystack: []const u8) ?Match {
-        if (haystack.len == 0) return null;
-        const maybe_matched = regex.matchInternal(haystack);
-        if (maybe_matched) |m| {
-            const m1 = m[0];
-            const m2 = m[1];
-            return Match{
-                .slice = haystack[m1..m2],
-                .start = m1,
-                .end = m2,
-            };
-        } else {
-            return null;
+pub fn SizedRegex(ops: comptime_int, char_sets: comptime_int) type {
+    return struct {
+        patt: [ops]RegOp = [1]RegOp{.{ .unused = {} }} ** ops,
+        sets: [char_sets]CharSet = [1]CharSet{.{ .low = 0, .hi = 0 }} ** char_sets,
+
+        const SizedRegexT = @This();
+
+        pub fn compile(patt: []const u8) ?SizedRegex {
+            return compile_regex(SizedRegexT, patt);
         }
-    }
 
-    /// Boolean test if the regex matches in the haystack.
-    pub fn isMatch(regex: *const Regex, haystack: []const u8) bool {
-        const maybe_matched = regex.matchInternal(haystack);
-        if (maybe_matched) |_| {
-            return true;
-        } else {
-            return false;
-        }
-    }
-
-    fn matchInternal(regex: *const Regex, haystack: []const u8) ?struct { usize, usize } {
-        const end = findPatternEnd(regex);
-        const patt = regex.patt[0..end];
-        switch (patt[0]) {
-            .begin => {
-                const matched = matchPatternGroup(patt[1..], &regex.sets, haystack);
-                if (matched) |m| {
-                    return .{ 0, m.i };
-                } else return null;
-            },
-            else => {
-                var matchlen: usize = 0;
-                while (matchlen < haystack.len) : (matchlen += 1) {
-                    const matched = matchPatternGroup(patt, &regex.sets, haystack[matchlen..]);
-                    if (matched) |m| {
-                        return .{ matchlen, matchlen + m.i };
-                    }
-                }
+        /// Match a regex pattern in `haystack`, if found, this returns a `Match`.
+        pub fn match(regex: *const SizedRegexT, haystack: []const u8) ?Match {
+            if (haystack.len == 0) return null;
+            const maybe_matched = regex.matchInternal(haystack);
+            if (maybe_matched) |m| {
+                const m1 = m[0];
+                const m2 = m[1];
+                return Match{
+                    .slice = haystack[m1..m2],
+                    .start = m1,
+                    .end = m2,
+                };
+            } else {
                 return null;
-            },
+            }
         }
-    }
 
-    /// Return an iterator over all matches.  Call `next` until exhausted.
-    /// A `Match` struct is returned for successful matches, consisting of
-    /// the match in both slice and bookend form.
-    pub fn iterator(regex: *const Regex, haystack: []const u8) RegexIterator {
-        return RegexIterator{
-            .regex = regex,
-            .haystack = haystack,
+        /// Boolean test if the regex matches in the haystack.
+        pub fn isMatch(regex: *const SizedRegexT, haystack: []const u8) bool {
+            const maybe_matched = regex.matchInternal(haystack);
+            if (maybe_matched) |_| {
+                return true;
+            } else {
+                return false;
+            }
+        }
+
+        /// Return an iterator over all matches.  Call `next` until exhausted.
+        /// A `Match` struct is returned for successful matches, consisting of
+        /// the match in both slice and bookend form.
+        pub fn iterator(regex: *const SizedRegexT, haystack: []const u8) RegexIterator {
+            return RegexIterator{
+                .regex = regex,
+                .haystack = haystack,
+            };
+        }
+
+        pub const RegexIterator = struct {
+            regex: *const SizedRegexT,
+            idx: usize = 0,
+            haystack: []const u8,
+
+            pub fn next(iter: *RegexIterator) ?Match {
+                const maybe_match = iter.regex.match(iter.haystack[iter.idx..]);
+                if (maybe_match) |m| {
+                    const m_start = m.start + iter.idx;
+                    const m_end = m.end + iter.idx;
+                    iter.idx += m.end;
+                    return Match{
+                        .slice = m.slice,
+                        .start = m_start,
+                        .end = m_end,
+                    };
+                } else {
+                    return null;
+                }
+            }
         };
-    }
-};
+
+        fn matchInternal(regex: *const SizedRegexT, haystack: []const u8) ?struct { usize, usize } {
+            const end = regex.findPatternEnd();
+            const patt = regex.patt[0..end];
+            switch (patt[0]) {
+                .begin => {
+                    const matched = matchPatternGroup(patt[1..], &regex.sets, haystack);
+                    if (matched) |m| {
+                        return .{ 0, m.i };
+                    } else return null;
+                },
+                else => {
+                    var matchlen: usize = 0;
+                    while (matchlen < haystack.len) : (matchlen += 1) {
+                        const matched = matchPatternGroup(patt, &regex.sets, haystack[matchlen..]);
+                        if (matched) |m| {
+                            return .{ matchlen, matchlen + m.i };
+                        }
+                    }
+                    return null;
+                },
+            }
+        }
+
+        fn findPatternEnd(regex: *const SizedRegexT) usize {
+            const patt = regex.patt;
+            for (0..patt.len) |i| {
+                if (patt[i] == .unused) {
+                    return i;
+                }
+            }
+            return patt.len;
+        }
+    };
+}
 
 /// A single match as returned from `regex.match` and `regex.iterator`.
 /// Note that the slice is borrowed from the haystack: to own it, call
@@ -192,28 +234,6 @@ pub const Match = struct {
             matched.end,
             std.zig.fmtEscapes(matched.slice),
         });
-    }
-};
-
-pub const RegexIterator = struct {
-    regex: *const Regex,
-    idx: usize = 0,
-    haystack: []const u8,
-
-    pub fn next(iter: *RegexIterator) ?Match {
-        const maybe_match = iter.regex.match(iter.haystack[iter.idx..]);
-        if (maybe_match) |m| {
-            const m_start = m.start + iter.idx;
-            const m_end = m.end + iter.idx;
-            iter.idx += m.end;
-            return Match{
-                .slice = m.slice,
-                .start = m_start,
-                .end = m_end,
-            };
-        } else {
-            return null;
-        }
     }
 };
 
@@ -875,7 +895,7 @@ fn findRight(patt: []const RegOp, j_in: usize) usize {
 }
 
 /// Move modifiers to prefix position.
-fn prefixModifier(patt: *[MAX_REGEX_OPS]RegOp, j: usize, op: RegOp) bool {
+fn prefixModifier(patt: []RegOp, j: usize, op: RegOp) bool {
     var find_j = j - 1;
     // If we already have a modifier, two are not kosher:
     switch (patt[find_j]) {
@@ -931,7 +951,7 @@ fn prefixModifier(patt: *[MAX_REGEX_OPS]RegOp, j: usize, op: RegOp) bool {
     return true;
 }
 
-fn beforePriorLeft(patt: *const [MAX_REGEX_OPS]RegOp, j: usize) usize {
+fn beforePriorLeft(patt: []RegOp, j: usize) usize {
     std.debug.assert(patt[j] == .right);
     var find_j = j - 1;
     var pump: usize = 0;
@@ -978,13 +998,45 @@ fn parseHex(in: []const u8) !u8 {
     return b[0];
 }
 
+pub fn compile(in: []const u8) ?Regex {
+    return compile_regex(Regex, in);
+}
+
+/// (Attempts to) compile a Regex with a decidedly large default of 4K
+/// operations and 1K character sets, returning `.{ops, sets}`, representing
+/// the minimum necessary `SizedRegex(ops, sets)` for this pattern.  The
+/// string provided must be comptime-known.  Since the values returned are
+/// themselves only usable at comptime, it is suggested this function only
+/// be used to tune the size of a regex during development, rather than
+/// called pointlessly every time the program is compiled.
+pub fn resourcesNeeded(comptime in: []const u8) struct { usize, usize } {
+    const maybe_out = compile_regex(SizedRegex(4096, 1024), in);
+    var max_s: usize = 0;
+    if (maybe_out) |out| {
+        for (&out.patt, 0..) |op, i| {
+            switch (op) {
+                .class, .not_class => |s_off| {
+                    max_s = @max(max_s, s_off);
+                },
+                .unused => {
+                    return .{ i, max_s };
+                },
+                else => {},
+            }
+        }
+    } else {
+        return .{ 0, 0 };
+    }
+    return .{ 0, 0 };
+}
+
 // TODO this should throw errors
 /// Compile a regex.
-pub fn compile(in: []const u8) ?Regex {
-    var out = Regex{};
+fn compile_regex(RegexT: type, in: []const u8) ?RegexT {
+    var out = RegexT{};
     var bad_string: bool = false;
-    var patt = &out.patt;
-    var sets = &out.sets;
+    var patt = out.patt[0..];
+    var sets = out.sets[0..];
     var i: usize = 0;
     var j: usize = 0;
     var s: u8 = 0;
@@ -1415,7 +1467,7 @@ fn printPattern(patt: []const RegOp) void {
     _ = printPatternInternal(patt);
 }
 
-fn printRegex(regex: *const Regex) void {
+fn printRegex(regex: anytype) void {
     const patt = regex.patt;
     const set_max = printPatternInternal(&patt);
     if (set_max) |max| {
@@ -1576,6 +1628,9 @@ test "match some things" {
 
 test "workshop" {
     //
+    const j, const s = resourcesNeeded("abcd[123][a-f]").?;
+    printRegex(&compile("abcd[123][a-f]").?);
+    std.debug.print("needs {d} operations and {d} charsets", .{ j, s });
 }
 
 test "iteration" {
