@@ -600,82 +600,43 @@ fn matchGroup(patt: []const RegOp, sets: *const CharSets, haystack: []const u8) 
     }
 }
 
-fn matchFourPatterns(
-    first: []const RegOp,
-    second: []const RegOp,
-    third: []const RegOp,
-    fourth: []const RegOp,
-    sets: *const CharSets,
-    haystack: []const u8,
-) ?OpMatch {
-    const m1m = matchPattern(first, sets, haystack);
-    if (m1m) |m1| {
-        return m1;
-    } else {
-        return matchThreePatterns(second, third, fourth, sets, haystack);
-    }
-}
-
-fn matchThreePatterns(
-    first: []const RegOp,
-    second: []const RegOp,
-    third: []const RegOp,
-    sets: *const CharSets,
-    haystack: []const u8,
-) ?OpMatch {
-    const m1m = matchPattern(first, sets, haystack);
-    if (m1m) |m1| {
-        return m1;
-    } else {
-        return matchTwoPatterns(second, third, sets, haystack);
-    }
-}
-
-fn matchTwoPatterns(
-    first: []const RegOp,
-    second: []const RegOp,
-    sets: *const CharSets,
-    haystack: []const u8,
-) ?OpMatch {
-    const m1m = matchPattern(first, sets, haystack);
-    if (m1m) |m1| {
-        return m1;
-    } else {
-        return matchPattern(second, sets, haystack);
-    }
-}
-
 fn dispatchTwoAlts(patt: []const RegOp, sets: *const CharSets, haystack: []const u8) ?OpMatch {
     const first = sliceAlt(patt);
-    const second = patt[first.len + 1 ..];
-    return matchTwoPatterns(first, second, sets, haystack);
+    const one_m = matchPattern(first, sets, haystack);
+    if (one_m) |m1| {
+        // groups return what they don't eat
+        return OpMatch{ .i = m1.i, .j = sliceAlt(patt[first.len + 1 ..]) };
+    }
+    return matchPattern(sliceAlt(patt[first.len + 1 ..]), sets, haystack);
 }
 
 fn dispatchThreeAlts(patt: []const RegOp, sets: *const CharSets, haystack: []const u8) ?OpMatch {
     const first = sliceAlt(patt);
-    const second = sliceAlt(patt[first.len + 1 ..]);
-    const third = patt[first.len + second.len + 2 ..];
-    return matchThreePatterns(first, second, third, sets, haystack);
+    const one_m = matchPattern(first, sets, haystack);
+    if (one_m) |m1| {
+        // groups return what they don't eat
+        return OpMatch{ .i = m1.i, .j = sliceAlt(patt[first.len + 1 ..]) };
+    }
+    return dispatchTwoAlts(sliceAlt(patt[first.len + 1 ..]), sets, haystack);
 }
-
 fn dispatchFourAlts(patt: []const RegOp, sets: *const CharSets, haystack: []const u8) ?OpMatch {
     const first = sliceAlt(patt);
-    const second = sliceAlt(patt[first.len + 1 ..]);
-    const third = sliceAlt(patt[first.len + second.len + 2 ..]);
-    const fourth = patt[first.len + second.len + third.len + 3 ..];
-    return matchFourPatterns(first, second, third, fourth, sets, haystack);
+    const one_m = matchPattern(first, sets, haystack);
+    if (one_m) |m1| {
+        // groups return what they don't eat
+        return OpMatch{ .i = m1.i, .j = sliceAlt(patt[first.len + 1 ..]) };
+    }
+    return dispatchThreeAlts(sliceAlt(patt[first.len + 1 ..]), sets, haystack);
 }
 
 fn dispatchMoreAlts(patt: []const RegOp, sets: *const CharSets, haystack: []const u8) ?OpMatch {
     const first = sliceAlt(patt);
-    const second = sliceAlt(patt[first.len + 1 ..]);
-    const third = sliceAlt(patt[first.len + second.len + 2 ..]);
-    const maybe_m = matchThreePatterns(first, second, third, sets, haystack);
-    if (maybe_m) |m| {
-        return m;
-    } else {
-        return matchPatternGroup(patt[first.len + second.len + third.len + 3 ..], sets, haystack);
-    }
+    const one_m = matchPattern(first, sets, haystack);
+    if (one_m) |m1| {
+        // groups return what they don't eat
+        return OpMatch{ .i = m1.i, .j = sliceAlt(patt[first.len + 1 ..]) };
+    } // This is inefficient for now, but I have a plan!
+    return matchPatternGroup(patt[first.len + 1 ..], sets, haystack);
 }
 
 fn matchClass(set: CharSet, c: u8) bool {
@@ -1663,12 +1624,24 @@ test "match some things" {
     try testMatchAll("abc(|||)d", "abcd");
     // No infinite loops
     try testMatchAll("(a*?)*aa", "aaa");
+    // MD5 hash
+    try testMatchAll("^[a-f0-9]{32}", "0800fc577294c34e0b28ad2839435945");
 }
 
 test "workshop" {
     //
     //try testMatchAll("^\\w*?abc", "qqqqabc");
+    try testMatchAll("employ(er|ee|ment|ing|able)", "employee");
+}
+
+test "badblood" {
     printRegexString("(abc){5,7}?");
+    try testMatchAll("employ(er|ee|ment|ing|able)", "employer");
+    try testMatchAll("employ(er|ee|ment|ing|able)", "employment");
+    try testMatchAll("employ(er|ee|ment|ing|able)", "employing");
+    try testMatchAll("employ(er|ee|ment|ing|able)", "employable");
+    try testMatchAll("employ(|er|ee|ment|ing|able)", "employ");
+    try testMatchAll("employ(|er|ee|ment|ing|able)$", "employee");
     try testMatchAll("(abc){3,5}?$", "abcabcabcabcabcabc");
 }
 
