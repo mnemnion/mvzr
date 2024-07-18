@@ -98,7 +98,7 @@ pub fn SizedRegex(ops: comptime_int, char_sets: comptime_int) type {
         const SizedRegexT = @This();
 
         pub fn compile(patt: []const u8) ?SizedRegexT {
-            return compile_regex(SizedRegexT, patt);
+            return compileRegex(SizedRegexT, patt);
         }
 
         /// Match a regex pattern in `haystack`, if found, this returns a `Match`.
@@ -977,7 +977,7 @@ fn findRight(patt: []const RegOp, j_in: usize) usize {
 /// possible, if you ever find a useful one.
 pub fn resourcesNeeded(comptime in: []const u8) struct { comptime_int, comptime_int } {
     // 257 to give room for the logError at the hard limit of 256
-    const maybe_out = compile_regex(SizedRegex(4096, 257), in);
+    const maybe_out = compileRegex(SizedRegex(4096, 257), in);
     var max_s: usize = 0;
     if (maybe_out) |out| {
         for (&out.patt, 0..) |op, i| {
@@ -1130,12 +1130,12 @@ fn findSetIndex(sets: []const CharSet, set: CharSet, s: usize) u8 {
 }
 
 pub fn compile(in: []const u8) ?Regex {
-    return compile_regex(Regex, in);
+    return compileRegex(Regex, in);
 }
 
 // TODO this should throw errors
 /// Compile a regex.
-fn compile_regex(RegexT: type, in: []const u8) ?RegexT {
+fn compileRegex(RegexT: type, in: []const u8) ?RegexT {
     var out = RegexT{};
     var patt = &out.patt;
     const sets = &out.sets;
@@ -1419,6 +1419,13 @@ fn compile_regex(RegexT: type, in: []const u8) ?RegexT {
 
 const BadString = error.BadString;
 
+// Special set masks
+const d_MASK: u64 = 0x03ff000000000000; // low
+const w_HI_MASK: u64 = 0x07fffffe87fffffe;
+const w_LOW_MASK = d_MASK;
+const s_MASK: u64 = 0x0000000100003e00; // low
+const ALL_MASK: u64 = ~@as(u64, 0);
+
 fn parseCharSet(in: []const u8, patt: []RegOp, sets: []CharSet, j: usize, i_in: usize, s_in: u8) !struct { usize, u8 } {
     var i = i_in;
     var s = s_in;
@@ -1453,6 +1460,28 @@ fn parseCharSet(in: []const u8, patt: []RegOp, sets: []CharSet, j: usize, i_in: 
                             0...63 => {
                                 const cut_c: u6 = @truncate(c2);
                                 low |= one << cut_c;
+                            },
+                            'w' => {
+                                low |= w_LOW_MASK;
+                                hi |= w_HI_MASK;
+                            },
+                            'W' => {
+                                low |= ~w_LOW_MASK;
+                                hi |= ~w_HI_MASK;
+                            },
+                            's' => {
+                                low |= s_MASK;
+                            },
+                            'S' => {
+                                low |= ~s_MASK;
+                                hi |= ~ALL_MASK;
+                            },
+                            'd' => {
+                                low |= d_MASK;
+                            },
+                            'D' => {
+                                low |= ~d_MASK;
+                                hi |= ALL_MASK;
                             },
                             'n' => {
                                 low |= one << 0x0a; // newline
