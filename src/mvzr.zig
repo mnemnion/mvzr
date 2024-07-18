@@ -1094,12 +1094,16 @@ pub fn compile(in: []const u8) ?Regex {
 }
 
 /// (Attempts to) compile a Regex with a decidedly large default of 4K
-/// operations and 1K character sets, returning `.{ops, sets}`, representing
+/// operations and 256 character sets, returning `.{ops, sets}`, representing
 /// the minimum necessary `SizedRegex(ops, sets)` for this pattern.  The
 /// string provided must be comptime-known.  Since the values returned are
 /// themselves only usable at comptime, it is suggested this function only
 /// be used to tune the size of a regex during development, rather than
 /// called pointlessly every time the program is compiled.
+///
+/// Note that if you run out of character sets in this function, you're out of
+/// luck, that limit is a hard one.  Regexen with more than 4k operations are
+/// possible, if you ever find a useful one.
 pub fn resourcesNeeded(comptime in: []const u8) struct { comptime_int, comptime_int } {
     const maybe_out = compile_regex(SizedRegex(4096, 1024), in);
     var max_s: usize = 0;
@@ -1110,6 +1114,9 @@ pub fn resourcesNeeded(comptime in: []const u8) struct { comptime_int, comptime_
                     max_s = @max(max_s, s_off);
                 },
                 .unused => {
+                    if (max_s >= 255) {
+                        @compileError("Maximum character sets is 256 (must fit in a u8)");
+                    }
                     return .{ i, max_s + 1 };
                 },
                 else => {},
