@@ -248,12 +248,18 @@ pub fn match(haystack: []const u8, pattern: []const u8) ?Match {
 }
 
 fn matchPatternGroup(patt: []const RegOp, set: *const CharSets, haystack: []const u8) ?OpMatch {
-    switch (countAlt(patt)) {
-        0 => return matchPattern(patt, set, haystack),
-        1 => return dispatchTwoAlts(patt, set, haystack),
-        2 => return dispatchThreeAlts(patt, set, haystack),
-        3 => return dispatchFourAlts(patt, set, haystack),
-        else => return dispatchMoreAlts(patt, set, haystack),
+    const did_match = switch (countAlt(patt)) {
+        0 => matchPattern(patt, set, haystack),
+        1 => dispatchTwoAlts(patt, set, haystack),
+        2 => dispatchThreeAlts(patt, set, haystack),
+        3 => dispatchFourAlts(patt, set, haystack),
+        else => dispatchMoreAlts(patt, set, haystack),
+    };
+    if (did_match) |m| {
+        // Strip our remainder
+        return OpMatch{ .i = m.i, .j = patt[0..0] };
+    } else {
+        return null;
     }
 }
 
@@ -605,9 +611,9 @@ fn dispatchTwoAlts(patt: []const RegOp, sets: *const CharSets, haystack: []const
     const one_m = matchPattern(first, sets, haystack);
     if (one_m) |m1| {
         // groups return what they don't eat
-        return OpMatch{ .i = m1.i, .j = sliceAlt(patt[first.len + 1 ..]) };
+        return OpMatch{ .i = m1.i, .j = patt[first.len + 1 ..] };
     }
-    return matchPattern(sliceAlt(patt[first.len + 1 ..]), sets, haystack);
+    return matchPattern(patt[first.len + 1 ..], sets, haystack);
 }
 
 fn dispatchThreeAlts(patt: []const RegOp, sets: *const CharSets, haystack: []const u8) ?OpMatch {
@@ -615,18 +621,18 @@ fn dispatchThreeAlts(patt: []const RegOp, sets: *const CharSets, haystack: []con
     const one_m = matchPattern(first, sets, haystack);
     if (one_m) |m1| {
         // groups return what they don't eat
-        return OpMatch{ .i = m1.i, .j = sliceAlt(patt[first.len + 1 ..]) };
+        return OpMatch{ .i = m1.i, .j = patt[first.len + 1 ..] };
     }
-    return dispatchTwoAlts(sliceAlt(patt[first.len + 1 ..]), sets, haystack);
+    return dispatchTwoAlts(patt[first.len + 1 ..], sets, haystack);
 }
 fn dispatchFourAlts(patt: []const RegOp, sets: *const CharSets, haystack: []const u8) ?OpMatch {
     const first = sliceAlt(patt);
     const one_m = matchPattern(first, sets, haystack);
     if (one_m) |m1| {
         // groups return what they don't eat
-        return OpMatch{ .i = m1.i, .j = sliceAlt(patt[first.len + 1 ..]) };
+        return OpMatch{ .i = m1.i, .j = patt[first.len + 1 ..] };
     }
-    return dispatchThreeAlts(sliceAlt(patt[first.len + 1 ..]), sets, haystack);
+    return dispatchThreeAlts(patt[first.len + 1 ..], sets, haystack);
 }
 
 fn dispatchMoreAlts(patt: []const RegOp, sets: *const CharSets, haystack: []const u8) ?OpMatch {
@@ -634,7 +640,7 @@ fn dispatchMoreAlts(patt: []const RegOp, sets: *const CharSets, haystack: []cons
     const one_m = matchPattern(first, sets, haystack);
     if (one_m) |m1| {
         // groups return what they don't eat
-        return OpMatch{ .i = m1.i, .j = sliceAlt(patt[first.len + 1 ..]) };
+        return OpMatch{ .i = m1.i, .j = patt[first.len + 1 ..] };
     } // This is inefficient for now, but I have a plan!
     return matchPatternGroup(patt[first.len + 1 ..], sets, haystack);
 }
@@ -1631,11 +1637,12 @@ test "match some things" {
 test "workshop" {
     //
     //try testMatchAll("^\\w*?abc", "qqqqabc");
-    try testMatchAll("employ(er|ee|ment|ing|able)", "employee");
+    try testMatchAll("foo|bar|baz", "bar");
 }
 
 test "badblood" {
     printRegexString("(abc){5,7}?");
+    try testMatchAll("employ(er|ee|ment|ing|able)", "employee");
     try testMatchAll("employ(er|ee|ment|ing|able)", "employer");
     try testMatchAll("employ(er|ee|ment|ing|able)", "employment");
     try testMatchAll("employ(er|ee|ment|ing|able)", "employing");
