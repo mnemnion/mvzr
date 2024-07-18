@@ -1778,14 +1778,11 @@ test "match some things" {
 test "Get the char sets you asked for" { // https://github.com/mnemnion/mvzr/issues/1#issuecomment-2235265209
     const test_patt = "(0[1-9]|1[012])[\\/](0[1-9]|[12][0-9]|3[01])[\\/][0-9]{4}";
     const j, const s = resourcesNeeded("(0[1-9]|1[012])[\\/](0[1-9]|[12][0-9]|3[01])[\\/][0-9]{4}");
-    std.debug.print("ops: {d}, sets {d}\n", .{ j, s });
     const ProperSize = SizedRegex(j, s);
     const haystack = "10/12/1951";
     const bigger_regex = ProperSize.compile(test_patt).?;
-    printRegex(bigger_regex);
     const match1 = bigger_regex.match(haystack).?;
-    std.debug.print("{}", .{match1});
-    // try expectEqual(haystack.len, .end);
+    try expectEqual(haystack.len, match1.end);
 }
 
 test "workshop" {
@@ -1795,7 +1792,7 @@ test "workshop" {
 }
 
 test "badblood" {
-    printRegexString("(abc){3,5}?$");
+    // printRegexString("(abc){3,5}?$");
     // try testMatchAll("(abc){3,5}?$", "abcabcabcabcabcabc");
 }
 
