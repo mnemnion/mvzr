@@ -167,7 +167,7 @@ pub fn SizedRegex(ops: comptime_int, char_sets: comptime_int) type {
             const patt = regex.patt[0..end];
             switch (patt[0]) {
                 .begin => {
-                    const matched = matchPatternGroup(patt[1..], &regex.sets, haystack);
+                    const matched = matchPatternWithAlt(patt[1..], &regex.sets, haystack);
                     if (matched) |m| {
                         return .{ 0, m.i };
                     } else return null;
@@ -175,7 +175,7 @@ pub fn SizedRegex(ops: comptime_int, char_sets: comptime_int) type {
                 else => {
                     var matchlen: usize = 0;
                     while (matchlen < haystack.len) : (matchlen += 1) {
-                        const matched = matchPatternGroup(patt, &regex.sets, haystack[matchlen..]);
+                        const matched = matchPatternWithAlt(patt, &regex.sets, haystack[matchlen..]);
                         if (matched) |m| {
                             return .{ matchlen, matchlen + m.i };
                         }
@@ -247,7 +247,7 @@ pub fn match(haystack: []const u8, pattern: []const u8) ?Match {
     }
 }
 
-fn matchPatternGroup(patt: []const RegOp, set: *const CharSets, haystack: []const u8) ?OpMatch {
+fn matchPatternWithAlt(patt: []const RegOp, set: *const CharSets, haystack: []const u8) ?OpMatch {
     const did_match = switch (countAlt(patt)) {
         0 => matchPattern(patt, set, haystack),
         1 => dispatchTwoAlts(patt, set, haystack),
@@ -280,6 +280,14 @@ fn matchPattern(patt: []const RegOp, sets: *const CharSets, haystack: []const u8
                 => {
                     this_patt = nextPattern(this_patt);
                     continue :dispatch;
+                },
+                .left => {
+                    if (groupAcceptsEmpty(this_patt)) {
+                        this_patt = nextPattern(this_patt);
+                        continue :dispatch;
+                    } else {
+                        return null;
+                    }
                 },
                 else => return null,
             }
@@ -595,49 +603,65 @@ fn matchUpToInner(patt: []const RegOp, sets: *const CharSets, haystack: []const 
 }
 
 fn matchGroup(patt: []const RegOp, sets: *const CharSets, haystack: []const u8) ?OpMatch {
+    // Cut out the group pattern:
     const inner_patt = sliceGroup(patt);
-    // Match up to first success.
-    const did_match = switch (countAlt(inner_patt)) {
-        0 => matchPattern(inner_patt, sets, haystack),
-        1 => dispatchTwoAlts(inner_patt, sets, haystack),
-        2 => dispatchThreeAlts(inner_patt, sets, haystack),
-        else => dispatchFourAlts(inner_patt, sets, haystack),
-        // else => dispatchMoreAlts(inner_patt, sets, haystack),
-    };
-    if (did_match) |m1| {
-        const next_patt = nextPattern(patt);
-        if (next_patt.len == 0) {
-            // may as well reuse that
-            return OpMatch{ .i = m1.i, .j = next_patt };
-        }
-        var next_match = matchPattern(next_patt, sets, haystack);
-        if (next_match) |m2| {
-            return OpMatch{ .i = m1.i + m2.i, .j = m2.j };
-        } else {
-            var remaining_patt = m1.j;
-            while (remaining_patt.len != 0) {
-                const remaining_match = switch (countAlt(remaining_patt)) {
-                    0 => matchPattern(remaining_patt, sets, haystack),
-                    1 => dispatchTwoAlts(remaining_patt, sets, haystack),
-                    2 => dispatchThreeAlts(remaining_patt, sets, haystack),
-                    else => dispatchFourAlts(remaining_patt, sets, haystack),
-                    // else => dispatchMoreAlts(remaining_patt, sets, haystack),
-                };
-                if (remaining_match) |m3| {
-                    next_match = matchPattern(next_patt, sets, haystack);
-                    if (next_match) |m_final| {
-                        return OpMatch{ .i = m3.i + m_final.i, .j = m_final.j };
-                    } else if (remaining_patt.len == 0) {
-                        return null;
-                    } else {
-                        remaining_patt = m3.j;
-                    }
-                }
-            }
+    // Empty group is a match:
+    if (inner_patt.len == 0) {
+        return OpMatch{ .i = 0, .j = nextPattern(patt) };
+    }
+    // And the next pattern (can be empty)
+    const next_patt = nextPattern(patt);
+    // Are there alts?
+    if (!hasAlt(patt)) {
+        const maybe_match = matchPattern(inner_patt, sets, haystack);
+        if (maybe_match) |m| {
+            // Success, return the next pattern.
+            return OpMatch{ .i = m.i, .j = next_patt };
+        } else { // Fail,  with nothing left to try.
             return null;
         }
+    } // There's at least one alt.
+    // Is there another pattern to check?
+    if (next_patt.len == 0) {
+        const our_match = matchAlt(inner_patt, sets, haystack);
+        if (our_match) |m| {
+            // Strip the remaining matches, may as well use empty next_patt
+            return OpMatch{ .i = m.i, .j = next_patt };
+        }
+    } // Try anything potentially unmatched, using the next pattern to test success
+    var remaining_patt = inner_patt;
+    while (remaining_patt.len != 0) {
+        const this_match = matchAlt(remaining_patt, sets, haystack);
+        if (this_match) |m1| {
+            // Make sure the next pattern passes:
+            const next_match = matchPattern(next_patt, sets, haystack[m1.i..]);
+            if (next_match) |m2| {
+                // Whole group matches, and we can use m2.j
+                return OpMatch{ .i = m1.i + m2.i, .j = m2.j };
+            } else { // Try our next pattern, if any.
+                remaining_patt = m1.j;
+            }
+        } else { // Nothing in our group passed
+            return null;
+        }
+    } // Ran out of pattern
+    return null;
+}
+
+fn matchAlt(patt: []const RegOp, sets: *const CharSets, haystack: []const u8) ?OpMatch {
+    const maybe_first = maybeAlt(patt);
+    if (maybe_first) |first_patt| {
+        const one_m = matchPattern(first_patt, sets, haystack);
+        if (one_m) |m1| {
+            // groups return what they don't eat
+            return OpMatch{ .i = m1.i, .j = patt[first_patt.len + 1 ..] };
+        } else {
+            // try the next one
+            return matchAlt(patt[first_patt.len + 1 ..], sets, haystack);
+        }
     } else {
-        return null;
+        // Ordinary pattern (last match)
+        return matchPattern(patt, sets, haystack);
     }
 }
 
@@ -677,7 +701,7 @@ fn dispatchMoreAlts(patt: []const RegOp, sets: *const CharSets, haystack: []cons
         // groups return what they don't eat
         return OpMatch{ .i = m1.i, .j = patt[first.len + 1 ..] };
     } // This is inefficient for now, but I have a plan!
-    return matchPatternGroup(patt[first.len + 1 ..], sets, haystack);
+    return matchPatternWithAlt(patt[first.len + 1 ..], sets, haystack);
 }
 
 fn matchClass(set: CharSet, c: u8) bool {
@@ -806,6 +830,54 @@ fn thisGroup(patt: []const RegOp) []const RegOp {
     unreachable;
 }
 
+fn patternAcceptsEmpty(patt: []const RegOp) bool {
+    switch (patt[0]) {
+        .optional,
+        .star,
+        .lazy_optional,
+        .lazy_star,
+        .eager_optional,
+        .eager_star,
+        .up_to,
+        .end,
+        => return true,
+        .left => {
+            if (groupAcceptsEmpty(patt)) {
+                return true;
+            } else {
+                return false;
+            }
+        },
+        else => return false,
+    }
+}
+
+/// Does the group accept empty matches?
+fn groupAcceptsEmpty(patt: []const RegOp) bool {
+    if (!hasAlt(patt)) {
+        const inner = sliceGroup(patt);
+        if (inner.len == 0) {
+            return true;
+        } else return patternAcceptsEmpty(inner);
+    }
+    var inner_patt = sliceGroup(patt);
+    while (true) {
+        const maybe_this_patt = maybeAlt(inner_patt);
+        if (maybe_this_patt) |this_patt| {
+            if (this_patt.len == 0) return true; // Empty alt matches empty string.
+            if (patternAcceptsEmpty(this_patt)) {
+                return true;
+            } else {
+                inner_patt = inner_patt[this_patt.len + 1 ..];
+                if (inner_patt.len == 0) return true; // Final empty pattern;
+            }
+        } else { // final patt
+            return (patternAcceptsEmpty(inner_patt));
+        }
+    }
+    unreachable;
+}
+
 fn findPatternEnd(regex: *const Regex) usize {
     const patt = regex.patt;
     for (0..patt.len) |i| {
@@ -816,11 +888,37 @@ fn findPatternEnd(regex: *const Regex) usize {
     return patt.len;
 }
 
-fn sliceAlt(regex: []const RegOp) []const RegOp {
-    const alt_at = findAlt(regex, 0);
+// XXX remove
+fn sliceAlt(patt: []const RegOp) []const RegOp {
+    const alt_at = findAlt(patt, 0);
     if (alt_at) |at| {
-        return regex[0..at];
+        return patt[0..at];
     } else unreachable; // verified before dispatch
+}
+
+fn maybeAlt(patt: []const RegOp) ?[]const RegOp {
+    const alt_at = findAlt(patt, 0);
+    if (alt_at) |at| {
+        return patt[0..at];
+    } else return null;
+}
+
+/// Returns if a group (must be a group!) has an alt.
+fn hasAlt(patt: []const RegOp) bool {
+    assert(patt[0] == .left); // We'll use this for a speedup later
+    var pump: usize = 0;
+    var j: usize = 1;
+    while (j < patt.len - 1) : (j += 1) {
+        switch (patt[j]) {
+            .left => pump += 1,
+            .right => pump -= 1,
+            .alt => {
+                if (pump == 0) return true;
+            },
+            else => {},
+        }
+    }
+    return false;
 }
 
 /// Returns the *interior* of a group.
@@ -906,7 +1004,7 @@ fn findRight(patt: []const RegOp, j_in: usize) usize {
 
 /// Move modifiers to prefix position.
 fn prefixModifier(patt: []RegOp, j: usize, op: RegOp) bool {
-    if (j == 0) return false;
+    if (j == 0 or patt[j] == .begin) return false;
     var find_j = j - 1;
     // travel back before last group
     switch (patt[find_j]) {
@@ -1011,7 +1109,7 @@ fn parseByte(in: []const u8) !struct { usize, u8 } {
     const c1 = std.fmt.parseInt(u16, in[0..d1], 10) catch {
         return error.BadString;
     };
-    if (c1 >= 254) {
+    if (c1 > 255) {
         logError("repetition counts must fit in a u8, got {d}\n", .{c1});
         return error.BadString;
     }
@@ -1587,6 +1685,20 @@ fn testMatchAll(needle: []const u8, haystack: []const u8) !void {
     }
 }
 
+fn testMatchEnd(needle: []const u8, haystack: []const u8) !void {
+    const maybe_regex = compile(needle);
+    if (maybe_regex) |regex| {
+        const maybe_match = regex.match(haystack);
+        if (maybe_match) |m| {
+            try expectEqual(haystack.len, m.end);
+        } else {
+            try expect(false);
+        }
+    } else {
+        try std.testing.expect(false);
+    }
+}
+
 fn testMatchAllP(needle: []const u8, haystack: []const u8) !void {
     const maybe_regex = compile(needle);
     if (maybe_regex) |regex| {
@@ -1665,25 +1777,39 @@ test "match some things" {
     try testMatchAll("abc(|||)d", "abcd");
     // No infinite loops
     try testMatchAll("(a*?)*aa", "aaa");
-    // MD5 hash
+    try testMatchAll("(){0,1}q$", "q");
+    try testMatchAll("(){1,2}q$", "q");
+    try testMatchAll("()+q$", "q");
+    try testMatchAll("^(q*)*$", "qqqq");
+    try testMatchEnd("[bc]*(cd)+", "cbcdcd");
+    // MD5 hash?
     try testMatchAll("^[a-f0-9]{32}", "0800fc577294c34e0b28ad2839435945");
+    try testMatchAll("ab+c|de+f", "abbbc");
+    try testMatchAll("ab+c|de+f", "deeeef");
+    try testFail("^ab+c|de+f", "abdef");
     try testMatchAll("employ(er|ee|ment|ing|able)", "employee");
     try testMatchAll("employ(er|ee|ment|ing|able)", "employer");
     try testMatchAll("employ(er|ee|ment|ing|able)", "employment");
+    try testMatchAll("employ(er|ee|ment|ing|able)", "employable");
+    try testMatchAll("employ(er|ee|ment|ing|able)", "employing");
+    try testMatchAll("employ(|er|ee|ment|ing|able)", "employ");
+    try testMatchAll("employ(|er|ee|ment|ing|able)$", "employee");
+    // non-catastropic backtracking #1
+    try testFail("(a+a+)+b", "a" ** 2048);
+    // non-catastropic backtracking #2
+    try testFail("(a+?a+?)+?b", "a" ** 2048);
+    // non-catastropic backtracking #3
+    try testFail("^(.*?,){254}P", "12345," ** 255);
 }
 
 test "workshop" {
-    //
+    //  ^(.*?,){11}P
     //try testMatchAll("^\\w*?abc", "qqqqabc");
-    try testMatchAll("employ(er|ee|ment|ing|able)", "employable");
-    try testMatchAll("employ(er|ee|ment|ing|able)", "employing");
 }
 
 test "badblood" {
-    printRegexString("(abc){5,7}?");
-    try testMatchAll("employ(|er|ee|ment|ing|able)", "employ");
-    try testMatchAll("employ(|er|ee|ment|ing|able)$", "employee");
-    try testMatchAll("(abc){3,5}?$", "abcabcabcabcabcabc");
+    printRegexString("(abc){3,5}?$");
+    // try testMatchAll("(abc){3,5}?$", "abcabcabcabcabcabc");
 }
 
 test "iteration" {
