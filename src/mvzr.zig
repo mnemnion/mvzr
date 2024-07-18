@@ -1132,7 +1132,7 @@ fn compile_regex(RegexT: type, in: []const u8) ?RegexT {
     var j: usize = 0;
     var s: u8 = 0;
     var pump: usize = 0;
-    dispatch: while (i < in.len and j + 1 < patt.len) : ({
+    dispatch: while (i < in.len and j < patt.len) : ({
         j += 1;
         i += 1;
     }) {
