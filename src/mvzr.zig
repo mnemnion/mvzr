@@ -983,7 +983,8 @@ fn findRight(patt: []const RegOp, j_in: usize) usize {
 /// luck, that limit is a hard one.  Regexen with more than 4k operations are
 /// possible, if you ever find a useful one.
 pub fn resourcesNeeded(comptime in: []const u8) struct { comptime_int, comptime_int } {
-    const maybe_out = compile_regex(SizedRegex(4096, 1024), in);
+    // 257 to give room for the logError at the hard limit of 256
+    const maybe_out = compile_regex(SizedRegex(4096, 257), in);
     var max_s: usize = 0;
     if (maybe_out) |out| {
         for (&out.patt, 0..) |op, i| {
@@ -992,9 +993,6 @@ pub fn resourcesNeeded(comptime in: []const u8) struct { comptime_int, comptime_
                     max_s = @max(max_s, s_off);
                 },
                 .unused => {
-                    if (max_s >= 255) {
-                        @compileError("Maximum character sets is 256 (must fit in a u8)");
-                    }
                     return .{ i, max_s + 1 };
                 },
                 else => {},
@@ -1534,6 +1532,11 @@ fn compile_regex(RegexT: type, in: []const u8) ?RegexT {
                 }
                 sets[this_s] = set;
                 if (this_s == s) {
+                    if (s == 255) {
+                        logError("Passed the hard 256 limit on charsets. Cannot compile.\n", .{});
+                        bad_string = true;
+                        break :dispatch;
+                    }
                     s += 1;
                 }
                 if (this_kind == .class) {
