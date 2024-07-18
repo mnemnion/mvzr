@@ -341,11 +341,6 @@ fn matchPattern(patt: []const RegOp, sets: []const CharSet, haystack: []const u8
         return null;
 }
 
-// Todo might just be patt.len == 0 now?
-inline fn atEnd(patt: []const RegOp, i: usize, haystack: []const u8) bool {
-    return patt.len == 0 or (patt[0] == .end and i == haystack.len);
-}
-
 const ascii = std.ascii;
 
 fn matchOne(patt: []const RegOp, sets: []const CharSet, sample: u8) ?OpMatch {
@@ -420,7 +415,7 @@ fn matchPlus(patt: []const RegOp, sets: []const CharSet, haystack: []const u8) ?
     const first_m = matchPattern(this_patt, sets, haystack);
     if (first_m == null) return null;
     const m1 = first_m.?;
-    // We can skip matchStar if we've at the end
+    // We can skip matchStar if we're at the end
     if (m1.i == haystack.len) return OpMatch{ .i = m1.i, .j = nextPattern(patt) };
     const m2 = matchStar(patt, sets, haystack[m1.i..]);
     // If matchStar produced 0, then its m2.j is invalid, we use ours
@@ -439,7 +434,7 @@ fn matchOptional(patt: []const RegOp, sets: []const CharSet, haystack: []const u
         const next_patt = nextPattern(patt);
         var i = m1.i;
         if (next_patt.len != 0) {
-            if (i == haystack.len) {
+            if (i == haystack.len and next_patt[0] != .end) {
                 // Reset.
                 i = 0;
             }
@@ -582,7 +577,7 @@ fn matchUpToInner(patt: []const RegOp, sets: []const CharSet, haystack: []const 
         var i = m1.i;
         var maybe_next: ?OpMatch = null;
         if (next_patt.len != 0) {
-            if (i == haystack.len) {
+            if (i == haystack.len and next_patt[0] != .end) {
                 // Reset (we still have m1.i)
                 i = 0;
             }
@@ -768,7 +763,7 @@ fn patternAfterGroup(patt: []const RegOp) []const RegOp {
 // Returns just our pattern.
 fn thisPattern(patt: []const RegOp) []const RegOp {
     switch (patt[0]) {
-        .left => return sliceGroup(patt),
+        .left => return thisGroup(patt),
         // This function is not called from modifier position by construction,
         // Except for .optional followed by .some, .sometimes, which needs
         // this:
@@ -1578,6 +1573,7 @@ fn logError(comptime fmt: []const u8, args: anytype) void {
         std.log.warn(fmt, args);
     }
 }
+
 //| TESTS
 
 const testing = std.testing;
@@ -1784,6 +1780,7 @@ test "match some things" {
     try testMatchAll("(a*?)*aa", "aaa");
     try testMatchAll("(){0,1}q$", "q");
     try testMatchAll("(){1,2}q$", "q");
+    try testMatchAll("(abc){3,5}?$", "abcabcabcabcabc");
     try testMatchAll("()+q$", "q");
     try testMatchAll("^(q*)*$", "qqqq");
     try testMatchEnd("[bc]*(cd)+", "cbcdcd");
