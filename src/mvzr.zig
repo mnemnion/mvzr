@@ -352,7 +352,7 @@ fn matchPattern(patt: []const RegOp, sets: []const CharSet, haystack: []const u8
 
                 return null;
             },
-            else => unreachable, // probably
+            .unused, .alt, .right, .begin => unreachable, // probably
         };
         if (maybe_match) |m| {
             this_patt = m.j;
@@ -399,7 +399,6 @@ fn matchOneByte(op: RegOp, sets: []const CharSet, c: u8) bool {
 }
 
 fn matchStar(patt: []const RegOp, sets: []const CharSet, haystack: []const u8, i_in: usize) OpMatch {
-    // TODO This should split immediately based on if there even is a next pattern.
     var i = i_in;
     const this_patt = thisPattern(patt);
     while (matchPattern(this_patt, sets, haystack, i)) |m| {
@@ -425,7 +424,7 @@ fn matchStar(patt: []const RegOp, sets: []const CharSet, haystack: []const u8, i
 
     const maybe_next = matchPattern(next_patt, sets, haystack, i);
     if (maybe_next) |m2| {
-        return OpMatch{ .i = m2.i, .j = nextPattern(next_patt) };
+        return m2;
     } // otherwise we gotta do the loopback dance.
     // TODO this logic is wrong because /our/ pattern might not match at every point in the string.
     // fix that later (I have something in mind here: a mask storing an intersection of every real
@@ -434,7 +433,10 @@ fn matchStar(patt: []const RegOp, sets: []const CharSet, haystack: []const u8, i
     while (true) {
         const try_next = matchPattern(next_patt, sets, haystack, i);
         if (try_next) |m2| {
-            return m2;
+            // Verify that our pattern can also match here
+            if (matchPattern(this_patt, sets, haystack, i)) |_| {
+                return m2;
+            } // Otherwise we keep backing out
         }
         if (i == i_in) break;
         i -= 1;
@@ -442,6 +444,7 @@ fn matchStar(patt: []const RegOp, sets: []const CharSet, haystack: []const u8, i
 
     return OpMatch{ .i = i_in, .j = nextPattern(next_patt) };
 }
+
 fn matchPlus(patt: []const RegOp, sets: []const CharSet, haystack: []const u8, i: usize) ?OpMatch {
     const this_patt = thisPattern(patt);
     const first_m = matchPattern(this_patt, sets, haystack, i);
@@ -2034,6 +2037,10 @@ test "match some things" {
         "William Gates Jr. Sucks.$",
         "William Gates Jr. Sucks.\r\n",
     );
+    // Backtrack star correctly
+    try testMatchAll("(fob)*boba$", "fobboba");
+    try testFail("^(fob)*boba$", "fobfobfoboba");
+    try testMatchSlice("(fob)*boba", "fobfobfoboba", "boba");
     // Word boundary
     try testMatchAll("\\bsnap\\b", "snap");
     try testMatchAll("\\bsnap\\b!", "snap!");
