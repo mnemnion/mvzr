@@ -1995,16 +1995,19 @@ test "match some things" {
     try testMatchSlice("\\bword\\b", "an isolated word ", "word");
     try testFail("\\bword\\b", "password");
     try testFail("\\bword\\b", "wordpress");
+    try testMatchAll("out\\Brage\\Bous", "outrageous");
+    try testMatchSlice("\\Brage\\B", "outrageous", "rage");
+    try testFail("\\Brage\\B", "rage within the machine");
 
     // https://github.com/mnemnion/mvzr/issues/1#issuecomment-2235265209
     try testMatchAll("[0-9]{4}", "1951");
     try testMatchAll("(0[1-9]|1[012])[\\/](0[1-9]|[12][0-9]|3[01])[\\/][0-9]{4}", "10/12/1951");
     try testMatchAll("[\\x09]", "\t");
-    // non-catastropic backtracking #1
+    // Non-catastropic backtracking #1
     try testFail("(a+a+)+b", "a" ** 2048);
-    // non-catastropic backtracking #2
+    // Non-catastropic backtracking #2
     try testFail("(a+?a+?)+?b", "a" ** 2048);
-    // non-catastropic backtracking #3
+    // Non-catastropic backtracking #3
     try testFail("^(.*?,){254}P", "12345," ** 255);
 }
 
@@ -2012,7 +2015,6 @@ test "workshop" {}
 
 test "badblood" {
     if (XXX) {
-        printRegexString("\\bsnap!\\b");
         // printRegexString("(abc){3,5}?$");
     }
 }
