@@ -2,7 +2,7 @@
 
 Finding myself in need of a regular expressions library for a Zig project, and needing it to build regex at runtime, not just comptime, I ended up speedrunning a little library for just that purpose.
 
-This is that library.  It's a simple bytecode-based Commander Pike-style VM.  Less than 1600 lines of load-bearing code, no dependencies other than `std`.
+This is that library.  It's a simple bytecode-based Commander Pike-style VM.  Just under 1500 lines of load-bearing code, no dependencies other than `std`.
 
 The provided Regex type allows 64 'operations' and 8 unique ASCII character sets.  If you would like more, or less, you can call `SizedRegex(num_ops, num_sets)` to customize the type.
 
@@ -11,7 +11,7 @@ The provided Regex type allows 64 'operations' and 8 unique ASCII character sets
 Drop the file into your project, or use the Zig build system:
 
 ```zig
-zig fetch --save "https://github.com/mnemnion/mvzr/archive/refs/tags/v0.0.10.tar.gz"
+zig fetch --save "https://github.com/mnemnion/mvzr/archive/refs/tags/v0.1.0.tar.gz"
 ```
 
 I'll do my best to keep that URL fresh, but it pays to check over here: ➔
@@ -31,7 +31,9 @@ For the latest release version.
 - Sets: `[abc]`, `[^abc]`, `[a-z]`, `[^a=z]`
 - Built-in character groups (ASCII): `\w`, `\W`, `\s`, `\S`, `\d`, `\D`
 - Escape sequences: `\t`, `\n`, `\r`, `\xXX` hex format
+    - Same set as Zig: if you need the weird C ones, use `\x` format
 - Begin and end `^` and `$`
+- Word boundaries `\b`, `\B`
 - `{M}`, `{M,}`, `{M,N}`, `{,N}`
 
 ## Limitations and Quirks
@@ -48,13 +50,15 @@ For the latest release version.
 
 As long as you color within the lines, it should be fine.
 
-The main thing to realize is that this is only for **known regex patterns**.  It uses the stack to store the `M - N` part of an `{M,N}`, it backtracks greedy matches, and if you don't control the strings that get compiled, don't use it.
+This library is not intended for use where an attacker could conceivably control the regex pattern.
 
 Much like managing your own memory, if you know your tools and are smart about it, you can get a lot done with `mvzr`.
 
 ## Interface
 
-`mvzr.Regex` is available at `comptime` or runtime, and returns an `mvzr.Match`, consisting of a `.slice` field containing the match, as well as the `.start` and `.end` locations in the haystack.  This is a borrowed slice, to own it, call `match.toOwned(allocator)`, and deallocate later with `match.deinit(allocator)`, or just free the `.slice`.
+`mvzr.Regex` is available at `comptime` or runtime, and returns an `mvzr.Match`, consisting of a `.slice` field containing the match, as well as the `.start` and `.end` locations in the haystack.  This is a borrowed slice, to own it, call `match.toOwnedMatch(allocator)`, and deallocate later with `match.deinit(allocator)`, or just free the `.slice`.
+
+Similarly, if you need to store a `Regex` or `SizedRegex` for later, call `regex.toOwnedRegex(allocator)`, freeing later with `allocator.destroy(heap_regex)`.
 
 ```zig
 // aka SizedRegex(64, 8)
