@@ -132,6 +132,14 @@ pub fn SizedRegex(ops: comptime_int, char_sets: comptime_int) type {
             }
         }
 
+        /// Copy a Regex to the heap, returning a pointer.  Free the memory
+        /// later with `allocator.destroy(owned_regex)`.
+        pub fn toOwnedRegex(regex: *const SizedRegexT, allocator: std.mem.Allocator) !*const SizedRegexT {
+            const heap_regex = try allocator.create(SizedRegexT);
+            heap_regex.* = regex.*;
+            return heap_regex;
+        }
+
         /// Return an iterator over all matches.  Call `next` until exhausted.
         /// A `Match` struct is returned for successful matches, consisting of
         /// the match in both slice and bookend form.
@@ -209,7 +217,7 @@ pub const Match = struct {
 
     /// Return an copy of the Match with fresh memory allocator for the
     /// slice.
-    pub fn toOwned(matched: Match, allocator: std.mem.Allocator) !Match {
+    pub fn toOwnedMatch(matched: Match, allocator: std.mem.Allocator) !Match {
         const new_slice = try allocator.dupe(u8, matched.slice);
         return Match{
             .slice = new_slice,
@@ -1844,7 +1852,7 @@ fn testMatchAll(needle: []const u8, haystack: []const u8) !void {
             try expect(false);
         }
     } else {
-        try std.testing.expect(false);
+        try expect(false);
     }
 }
 
@@ -1858,7 +1866,7 @@ fn testMatchEnd(needle: []const u8, haystack: []const u8) !void {
             try expect(false);
         }
     } else {
-        try std.testing.expect(false);
+        try expect(false);
     }
 }
 
@@ -1880,7 +1888,7 @@ fn testMatchSlice(needle: []const u8, haystack: []const u8, slice: []const u8) !
             try expect(false);
         }
     } else {
-        try std.testing.expect(false);
+        try expect(false);
     }
 }
 
@@ -1889,7 +1897,34 @@ fn testFail(needle: []const u8, haystack: []const u8) !void {
     if (maybe_regex) |regex| {
         try expectEqual(null, regex.match(haystack));
     } else {
-        try std.testing.expect(false);
+        try expect(false);
+    }
+}
+
+fn downStackRegex(RegexT: type, regex: RegexT, allocator: std.mem.Allocator) !*const RegexT {
+    const heap_regex = try regex.toOwnedRegex(allocator);
+    return heap_regex;
+}
+
+fn downStackMatch(matched: Match, allocator: std.mem.Allocator) !Match {
+    const heap_match = try matched.toOwnedMatch(allocator);
+    return heap_match;
+}
+
+fn testOwnedRegex(needle: []const u8, haystack: []const u8) !void {
+    const allocator = std.testing.allocator;
+    const maybe_regex = compile(needle);
+    if (maybe_regex) |regex| {
+        const heap_regex = try downStackRegex(Regex, regex, allocator);
+        defer allocator.destroy(heap_regex);
+        const maybe_match = heap_regex.match(haystack);
+        if (maybe_match) |m| {
+            const matched = try downStackMatch(m, allocator);
+            defer matched.deinit(allocator);
+            try expectEqualStrings(haystack, matched.slice);
+        } else try expect(false);
+    } else {
+        try expect(false);
     }
 }
 
@@ -2020,6 +2055,11 @@ test "match some things" {
     try testFail("(a+?a+?)+?b", "a" ** 2048);
     // Non-catastropic backtracking #3
     try testFail("^(.*?,){254}P", "12345," ** 255);
+}
+
+test "heap allocated regex and match" {
+    try testOwnedRegex("abcde", "abcde");
+    try testOwnedRegex("^[a-f0-9]{32}", "0800fc577294c34e0b28ad2839435945");
 }
 
 test "workshop" {
