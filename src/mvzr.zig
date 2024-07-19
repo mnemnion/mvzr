@@ -2022,12 +2022,12 @@ test "match some things" {
     try testFail("^(.*?,){254}P", "12345," ** 255);
 }
 
-test "workshop" {}
+test "workshop" {
+    //
+}
 
 test "badblood" {
-    if (XXX) {
-        // printRegexString("(abc){3,5}?$");
-    }
+    //
 }
 
 test "Get the char sets you asked for" { // https://github.com/mnemnion/mvzr/issues/1#issuecomment-2235265209
@@ -2068,13 +2068,9 @@ test "iteration" {
 }
 
 test "comptime regex" {
-    if (XXX) {
-        const comp_regex = comptime compile("foo+").?;
-        const run_match = comp_regex.match("foofoofoo");
-        try expect(run_match != null);
-        const comptime_match = comptime comp_regex.match("foofoofoo");
-        try expect(comptime_match != null);
-    } else {
-        try expect(true);
-    }
+    const comp_regex = comptime compile("foo+").?;
+    const run_match = comp_regex.match("foofoofoo");
+    try expect(run_match != null);
+    const comptime_match = comptime comp_regex.match("foofoofoo");
+    try expect(comptime_match != null);
 }
