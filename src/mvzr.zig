@@ -1225,6 +1225,11 @@ fn compileRegex(RegexT: type, in: []const u8) ?RegexT {
     var out = RegexT{};
     var patt = &out.patt;
     const sets = &out.sets;
+    // TODO make this an inner function which throws errors,
+    // and takes patt and sets as slices.  That should minimize
+    // the amount of compiler specialization needed; a perfect
+    // compiler would know that this function can share almost all
+    // of the code per SizedRegex, but I don't want to rely on that.
     var bad_string: bool = false;
     var i: usize = 0;
     var j: usize = 0;
@@ -1441,11 +1446,17 @@ fn compileRegex(RegexT: type, in: []const u8) ?RegexT {
                         'S' => {
                             patt[j] = RegOp{ .not_whitespace = {} };
                         },
-                        'b' => {
-                            patt[j] = RegOp{ .word_break = {} };
-                        },
-                        'B' => {
-                            patt[j] = RegOp{ .not_word_break = {} };
+                        'b', 'B' => |ch| {
+                            if (j > 0 and (patt[j - 1] == .word_break or patt[j - 1] == .not_word_break)) {
+                                logError("Consecutive word breaks are not legal or sensible\n", .{});
+                                bad_string = true;
+                                break :dispatch;
+                            }
+                            if (ch == 'b') {
+                                patt[j] = RegOp{ .word_break = {} };
+                            } else {
+                                patt[j] = RegOp{ .not_word_break = {} };
+                            }
                         },
                         // character escapes
                         'r', 'n', 't' => {
