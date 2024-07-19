@@ -320,9 +320,21 @@ fn matchPattern(patt: []const RegOp, sets: []const CharSet, haystack: []const u8
             .eager_plus => matchEagerPlus(this_patt[1..], sets, haystack[i..]),
             .some => matchSome(this_patt, sets, haystack[i..]),
             .up_to => matchUpTo(this_patt, sets, haystack[i..]),
-            // Finding .end here always means we've failed.
-            .end => return null,
             .left => matchGroup(this_patt, sets, haystack[i..]),
+            .end => { // We accept a final newline, but only a Unix one
+                if (i + 1 == haystack.len and haystack[i] == '\n') {
+                    // Compiler ensures that this is the last operation
+                    return OpMatch{ .i = i + 1, .j = patt[0..0] };
+                } else // Ok.  Fine, we'll try it the Windows way
+                if (i + 2 == haystack.len // Such a dumb convention
+                and haystack[i] == '\r' // Suck it Bill Gates
+                and haystack[i + 1] == '\n') { // Thanks for making my regex engine slow
+                    // Still. Nothing but the best for my users
+                    return OpMatch{ .i = i + 2, .j = patt[0..0] };
+                }
+
+                return null;
+            },
             else => unreachable, // probably
         };
         if (maybe_match) |m| {
@@ -1876,6 +1888,13 @@ test "match some things" {
     try testMatchAll("[\\x48-\\x4c$]+", "HIJ$KL");
     try testMatchAll("[^^]+", "abXdea!@#$!%$#$%$&$");
     try testFail("^[^^]+", "^abXdea!@#$!%$#$%$&$");
+
+    // Newlines at end
+    try testMatchAll("To the Bitter End$", "To the Bitter End\n");
+    try testMatchAll(
+        "William Gates Jr. Is A Little, Bitch.$",
+        "William Gates Jr. Is A Little, Bitch.\r\n",
+    );
 
     // https://github.com/mnemnion/mvzr/issues/1#issuecomment-2235265209
     try testMatchAll("[0-9]{4}", "1951");
