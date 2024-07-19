@@ -453,7 +453,7 @@ fn matchStar(patt: []const RegOp, sets: []const CharSet, haystack: []const u8, i
     while (true) {
         const try_next = matchPattern(next_patt, sets, haystack, i);
         if (try_next) |m2| {
-            return OpMatch{ .i = m2.i, .j = m2.j };
+            return m2;
         }
         if (i == i_in) break;
         i -= 1;
@@ -474,8 +474,8 @@ fn matchPlus(patt: []const RegOp, sets: []const CharSet, haystack: []const u8, i
     // nextPattern is also able to match zero, it will do so again.
     if (m2.i == m1.i) {
         return OpMatch{ .i = m1.i, .j = nextPattern(patt) };
-    } else { // TODO there will a lot of these, this can just be "return m2"
-        return OpMatch{ .i = m2.i, .j = m2.j };
+    } else {
+        return m2;
     }
 }
 
@@ -493,7 +493,7 @@ fn matchOptional(patt: []const RegOp, sets: []const CharSet, haystack: []const u
             }
             const maybe_next = matchPattern(next_patt, sets, haystack, i);
             if (maybe_next) |m2| {
-                return OpMatch{ .i = m2.i, .j = m2.j };
+                return m2;
             } else { // Drop our match.
                 return matchPattern(next_patt, sets, haystack, i_in);
             }
@@ -537,7 +537,7 @@ fn matchLazyStar(patt: []const RegOp, sets: []const CharSet, haystack: []const u
         const match_theirs = matchPattern(next_patt, sets, haystack, i);
         if (match_theirs) |m1| {
             // All done
-            return OpMatch{ .i = m1.i, .j = m1.j };
+            return m1;
         } else {
             const match_ours = matchPattern(this_patt, sets, haystack, i);
             if (match_ours) |m2| {
@@ -559,7 +559,7 @@ fn matchLazyPlus(patt: []const RegOp, sets: []const CharSet, haystack: []const u
     if (m1.i == haystack.len) return OpMatch{ .i = m1.i, .j = nextPattern(patt) };
     const m2 = matchLazyStar(patt, sets, haystack, m1.i);
     // TODO do we need to reset to m1.j if m2.i == m1.i? Probably (not)
-    return OpMatch{ .i = m2.i, .j = m2.j };
+    return m2;
 }
 
 fn matchLazyOptional(patt: []const RegOp, sets: []const CharSet, haystack: []const u8, i: usize) ?OpMatch {
@@ -578,7 +578,7 @@ fn matchEagerPlus(patt: []const RegOp, sets: []const CharSet, haystack: []const 
     const m1 = first_m.?;
     if (m1.i == haystack.len) return OpMatch{ .i = m1.i, .j = nextPattern(patt) };
     const m2 = matchEagerStar(patt, sets, haystack, m1.i);
-    return OpMatch{ .i = m2.i, .j = m2.j };
+    return m2;
 }
 
 fn matchEagerStar(patt: []const RegOp, sets: []const CharSet, haystack: []const u8, i_in: usize) OpMatch {
@@ -654,17 +654,17 @@ fn matchUpToInner(
             if (maybe_next) |m2| {
                 if (m2.i == haystack.len) {
                     // As far as it goes
-                    return OpMatch{ .i = m2.i, .j = m2.j };
+                    return m2;
                 }
             }
         }
         const maybe_rest = matchUpToInner(patt, sets, haystack, m1.i, count - 1);
         if (maybe_rest) |m3| {
-            return OpMatch{ .i = m3.i, .j = m3.j };
+            return m3;
         }
         // Otherwise we backtrack from down stack.
         if (maybe_next) |m2| {
-            return OpMatch{ .i = m2.i, .j = m2.j };
+            return m2;
         } else {
             return null;
         }
@@ -708,7 +708,7 @@ fn matchGroup(patt: []const RegOp, sets: []const CharSet, haystack: []const u8, 
             const next_match = matchPattern(next_patt, sets, haystack, m1.i);
             if (next_match) |m2| {
                 // Whole group matches, and we can use m2.j
-                return OpMatch{ .i = m2.i, .j = m2.j };
+                return m2;
             } else { // Try our next pattern, if any.
                 remaining_patt = m1.j;
             }
