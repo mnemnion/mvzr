@@ -24,6 +24,8 @@ const RegexType = enum(u5) {
     end,
     left,
     right,
+    word_break,
+    not_word_break,
     alt,
     optional,
     star,
@@ -54,6 +56,8 @@ pub const RegOp = union(RegexType) {
     end: void,
     left: void, // TODO add offset u8
     right: void, // TODO add head-match offset
+    word_break: void,
+    not_word_break: void,
     alt: void, // TODO add offset u8
     optional: void,
     star: void,
@@ -321,6 +325,20 @@ fn matchPattern(patt: []const RegOp, sets: []const CharSet, haystack: []const u8
             .some => matchSome(this_patt, sets, haystack[i..]),
             .up_to => matchUpTo(this_patt, sets, haystack[i..]),
             .left => matchGroup(this_patt, sets, haystack[i..]),
+            .word_break => at_word_break: {
+                if (i == 0) {
+                    break :at_word_break OpMatch{ .i = 0, .j = this_patt[1..] };
+                } else if (atWordBreak(haystack[i - 1 ..])) {
+                    break :at_word_break OpMatch{ .i = 0, .j = this_patt[1..] };
+                } else break :at_word_break null;
+            },
+            .not_word_break => not_word_break: {
+                if (i == 0) {
+                    break :not_word_break null;
+                } else if (!atWordBreak(haystack[i - 1 ..])) {
+                    break :not_word_break OpMatch{ .i = 0, .j = this_patt[1..] };
+                } else break :not_word_break null;
+            },
             .end => { // We accept a final newline, but only a Unix one
                 if (i + 1 == haystack.len and haystack[i] == '\n') {
                     // Compiler ensures that this is the last operation
@@ -353,6 +371,10 @@ fn matchPattern(patt: []const RegOp, sets: []const CharSet, haystack: []const u8
 
 const ascii = std.ascii;
 
+inline fn isWordChar(c: u8) bool {
+    return ascii.isAlphanumeric(c) or c == '_';
+}
+
 fn matchOne(patt: []const RegOp, sets: []const CharSet, sample: u8) ?OpMatch {
     if (matchOneByte(patt[0], sets, sample)) {
         return OpMatch{ .i = 1, .j = patt[1..] };
@@ -368,13 +390,28 @@ fn matchOneByte(op: RegOp, sets: []const CharSet, c: u8) bool {
         .not_class => |c_off| !matchClass(sets[c_off], c),
         .digit => ascii.isDigit(c),
         .not_digit => !ascii.isDigit(c),
-        .alpha => ascii.isAlphanumeric(c) or c == '_',
-        .not_alpha => (!ascii.isAlphanumeric(c) and !(c == '_')),
+        .alpha => isWordChar(c),
+        .not_alpha => !isWordChar(c),
         .whitespace => ascii.isWhitespace(c),
         .not_whitespace => !ascii.isWhitespace(c),
         .char => |ch| (c == ch),
         else => unreachable,
     };
+}
+
+/// Test if we're at a word break position at haystack[1]
+fn atWordBreak(haystack: []const u8) bool {
+    const char_here = isWordChar(haystack[1]);
+    if (!char_here) return false;
+    if (!isWordChar(haystack[0])) {
+        return true;
+    } else if (haystack.len == 2) {
+        return true;
+    } else if (!isWordChar(haystack[2])) {
+        return true;
+    } else {
+        return false;
+    }
 }
 
 fn matchStar(patt: []const RegOp, sets: []const CharSet, haystack: []const u8) OpMatch {
@@ -722,6 +759,8 @@ fn nextPattern(patt: []const RegOp) []const RegOp {
         .unused, .begin => @panic("Internal error, .unused or .begin encountered"),
         .right => @panic("Internal error, encountered .right"),
         .left => return patternAfterGroup(patt),
+        .word_break,
+        .not_word_break,
         .alt,
         .optional,
         .star,
@@ -1367,6 +1406,12 @@ fn compileRegex(RegexT: type, in: []const u8) ?RegexT {
                         'S' => {
                             patt[j] = RegOp{ .not_whitespace = {} };
                         },
+                        'b' => {
+                            patt[j] = RegOp{ .word_break = {} };
+                        },
+                        'B' => {
+                            patt[j] = RegOp{ .not_word_break = {} };
+                        },
                         // character escapes
                         'r', 'n', 't' => {
                             patt[j] = RegOp{ .char = valueFor(in[i..]).? };
@@ -1892,8 +1937,8 @@ test "match some things" {
     // Newlines at end
     try testMatchAll("To the Bitter End$", "To the Bitter End\n");
     try testMatchAll(
-        "William Gates Jr. Is A Little, Bitch.$",
-        "William Gates Jr. Is A Little, Bitch.\r\n",
+        "William Gates Jr. Sucks.$",
+        "William Gates Jr. Sucks.\r\n",
     );
 
     // https://github.com/mnemnion/mvzr/issues/1#issuecomment-2235265209
@@ -1908,7 +1953,11 @@ test "match some things" {
     try testFail("^(.*?,){254}P", "12345," ** 255);
 }
 
-test "workshop" {}
+test "workshop" {
+    //
+    printRegexString("\\bsnap!\\b");
+    try testMatchAll("\\bsnap!\\b", "snap!");
+}
 
 test "badblood" {
     // printRegexString("(abc){3,5}?$");

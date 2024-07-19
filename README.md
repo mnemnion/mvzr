@@ -40,7 +40,9 @@ For the latest release version.
 - No fancy modifiers (you want case-insensitive, great, lowercase your string)
 - `.` matches any one byte.  `[^\n\r]` works fine if that's not what you want
     - Or split into lines first, divide and conquer
+    - Note: `$` permits a final newline, but `^` must be the beginning of a string, and `$` _only_ matches a final newline.
 - Backtracks (sorry. For this to work without backtracking, we need async back)
+    - Preliminary tests indicate that this backtracking is non-catastrophic
 - Compiler does some best-effort validation but I haven't really pounded on it
 - No capture groups.  Divide and conquer
 
