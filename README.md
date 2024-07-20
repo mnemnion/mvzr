@@ -28,7 +28,7 @@ For the latest release version.
 - Possessive/eager qualifiers: `*+`, `++`, `?+`
 - Alternation: `foo|bar|baz`
 - Grouping `foo|(bar|baz)+|quux`
-- Sets: `[abc]`, `[^abc]`, `[a-z]`, `[^a=z]`
+- Sets: `[abc]`, `[^abc]`, `[a-z]`, `[^a-z]`, `[\w+-]`, `[\x04-\x1b]`
 - Built-in character groups (ASCII): `\w`, `\W`, `\s`, `\S`, `\d`, `\D`
 - Escape sequences: `\t`, `\n`, `\r`, `\xXX` hex format
     - Same set as Zig: if you need the weird C ones, use `\x` format

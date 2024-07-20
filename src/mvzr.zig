@@ -1719,9 +1719,13 @@ fn parseCharSet(in: []const u8, patt: []RegOp, sets: []CharSet, j: usize, i_in: 
                     logError("Invalid range: '{u}' > '{u}'\n", .{ c1, c_end });
                     return BadString;
                 }
-            } else { // '-' in set, value is 45 so
-                const cut_hyphen: u6 = @truncate('-');
-                low |= one << cut_hyphen;
+            } else { // '-' in set, add c1
+                const c_trunc: u6 = @truncate(c1);
+                switch (c1) {
+                    0...63 => low |= one << c_trunc,
+                    64...127 => hi |= one << c_trunc,
+                    128...255 => return BadString,
+                }
             }
         }
     } // end while
@@ -2061,6 +2065,9 @@ test "match some things" {
     try testMatchAll("[0-9]{4}", "1951");
     try testMatchAll("(0[1-9]|1[012])[\\/](0[1-9]|[12][0-9]|3[01])[\\/][0-9]{4}", "10/12/1951");
     try testMatchAll("[\\x09]", "\t");
+    // https://github.com/mnemnion/mvzr/issues/1#issuecomment-2238087036
+    try testMatchAll("^[a-zA-Z0-9_!#$%&.-]+@([a-zA-Z0-9.-])+$", "myname.myfirst_name@gmail.com");
+
     // Non-catastropic backtracking #1
     try testFail("(a+a+)+b", "a" ** 2048);
     // Non-catastropic backtracking #2
@@ -2069,14 +2076,14 @@ test "match some things" {
     try testFail("^(.*?,){254}P", "12345," ** 255);
 }
 
+test "workshop" {
+    // printRegexString("^[a-zA-Z0-9_!#$%&.-]+@([a-zA-Z0-9.-])+$");
+    // try testMatchAll("^[a-zA-Z0-9_!#$%&.-]+@([a-zA-Z0-9.-])+$", "myname.myfirst_name@gmail.com");
+    //
+}
 test "heap allocated regex and match" {
     try testOwnedRegex("abcde", "abcde");
     try testOwnedRegex("^[a-f0-9]{32}", "0800fc577294c34e0b28ad2839435945");
-}
-
-test "workshop" {
-    //
-    try testMatchAll("(a*?)*a", "aa");
 }
 
 test "badblood" {
