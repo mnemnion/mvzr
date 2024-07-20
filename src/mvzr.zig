@@ -503,10 +503,15 @@ fn matchLazyStar(patt: []const RegOp, sets: []const CharSet, haystack: []const u
     const this_patt = thisPattern(patt);
     const next_patt = nextPattern(patt);
     // Other guy gets the first shot
-    var match_first = matchPattern(next_patt, sets, haystack, i_in);
+    var match_first = if (next_patt.len != 0)
+        matchPattern(next_patt, sets, haystack, i_in)
+    else
+        null;
+
     if (match_first) |m| {
         return m;
     }
+
     var i: usize = i_in;
     // Our turn
     match_first = matchPattern(this_patt, sets, haystack, i);
@@ -552,7 +557,7 @@ fn matchLazyOptional(patt: []const RegOp, sets: []const CharSet, haystack: []con
     if (maybe_match) |m| {
         return m;
     } // TODO matchEagerOptional prevents a spurious nextPattern test (post refactor)
-    return matchOptional(patt, sets, haystack, i);
+    return matchEagerOptional(patt, sets, haystack, i);
 }
 
 fn matchEagerPlus(patt: []const RegOp, sets: []const CharSet, haystack: []const u8, i: usize) ?OpMatch {
@@ -2071,6 +2076,7 @@ test "heap allocated regex and match" {
 
 test "workshop" {
     //
+    try testMatchAll("(a*?)*a", "aa");
 }
 
 test "badblood" {
