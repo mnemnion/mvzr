@@ -38,6 +38,7 @@ const RegexType = enum(u5) {
     eager_plus,
     some,
     up_to,
+    eager_up_to,
     dot,
     char,
     class,
@@ -70,6 +71,7 @@ pub const RegOp = union(RegexType) {
     eager_plus: void,
     some: u8,
     up_to: u8,
+    eager_up_to: u8,
     dot: void,
     char: u8, // character byte
     class: u8, // offset into class array
@@ -296,6 +298,7 @@ fn matchPattern(patt: []const RegOp, sets: []const CharSet, haystack: []const u8
                 .eager_optional,
                 .eager_star,
                 .up_to,
+                .eager_up_to,
                 .end,
                 => {
                     this_patt = nextPattern(this_patt);
@@ -309,7 +312,8 @@ fn matchPattern(patt: []const RegOp, sets: []const CharSet, haystack: []const u8
                         return null;
                     }
                 },
-                else => return null,
+                .begin, .plus, .lazy_plus, .eager_plus, .some, .dot, .class, .not_class, .digit, .not_digit, .alpha, .not_alpha, .whitespace, .not_whitespace, .char => return null,
+                .right, .alt, .unused => unreachable,
             }
         }
         const maybe_match = switch (this_patt[0]) {
@@ -335,6 +339,7 @@ fn matchPattern(patt: []const RegOp, sets: []const CharSet, haystack: []const u8
             .eager_plus => matchEagerPlus(this_patt[1..], sets, haystack, i),
             .some => matchSome(this_patt, sets, haystack, i),
             .up_to => matchUpTo(this_patt, sets, haystack, i),
+            .eager_up_to => matchEagerUpTo(this_patt, sets, haystack, i),
             .left => matchGroup(this_patt, sets, haystack, i),
             .word_break => matchWordBreak(this_patt, sets, haystack, i),
             .not_word_break => matchNotWordBreak(this_patt, sets, haystack, i),
@@ -584,7 +589,7 @@ fn matchEagerStar(patt: []const RegOp, sets: []const CharSet, haystack: []const 
 fn matchSome(patt: []const RegOp, sets: []const CharSet, haystack: []const u8, i_in: usize) ?OpMatch {
     var count = patt[0].some;
     var i = i_in;
-    const this_patt = if (patt[1] == .up_to or patt[1] == .star)
+    const this_patt = if (patt[1] == .up_to or patt[1] == .eager_up_to or patt[1] == .star)
         thisPattern(patt[2..])
     else
         thisPattern(patt[1..]);
@@ -597,7 +602,7 @@ fn matchSome(patt: []const RegOp, sets: []const CharSet, haystack: []const u8, i
             return null;
         }
     } // We may need to slice manually
-    if (patt[1] == .up_to or patt[1] == .star) {
+    if (patt[1] == .eager_up_to or patt[1] == .up_to or patt[1] == .star) {
         return OpMatch{ .i = i, .j = patt[1..] };
     } else {
         return OpMatch{ .i = i, .j = nextPattern(patt) };
@@ -660,6 +665,24 @@ fn matchUpToInner(
     } else {
         return null;
     }
+}
+
+fn matchEagerUpTo(patt: []const RegOp, sets: []const CharSet, haystack: []const u8, i_in: usize) OpMatch {
+    const this_patt = thisPattern(patt[1..]);
+    const first_match = matchPattern(this_patt, sets, haystack, i_in);
+    if (first_match == null) return OpMatch{ .i = 0, .j = nextPattern(patt) };
+    // Keep it up
+    var latest_match: OpMatch = first_match.?;
+    var count = patt[0].eager_up_to - 1;
+    while (count > 0) : (count -= 1) {
+        const next_match = matchPattern(this_patt, sets, haystack, latest_match.i);
+        if (next_match) |m| {
+            latest_match = m;
+        } else {
+            break;
+        }
+    }
+    return OpMatch{ .i = latest_match.i, .j = nextPattern(patt) };
 }
 
 fn matchGroup(patt: []const RegOp, sets: []const CharSet, haystack: []const u8, i: usize) ?OpMatch {
@@ -822,6 +845,7 @@ fn nextPattern(patt: []const RegOp) []const RegOp {
         .eager_plus,
         .some,
         .up_to,
+        .eager_up_to,
         => return nextPattern(patt[1..]),
         .word_break,
         .not_word_break,
@@ -1157,9 +1181,12 @@ fn prefixModifier(patt: []RegOp, j: usize, op: RegOp) bool {
     var move_op = patt[find_j];
     if (op == .some and find_j > 0) {
         const prev_op = patt[find_j - 1];
-        if (prev_op == .up_to or prev_op == .star or prev_op == .optional) {
-            find_j -= 1;
-            move_op = prev_op;
+        switch (prev_op) {
+            .up_to, .eager_up_to, .star, .optional => {
+                find_j -= 1;
+                move_op = prev_op;
+            },
+            else => {},
         }
     }
     patt[find_j] = op;
@@ -1401,13 +1428,22 @@ fn compileRegex(RegexT: type, in: []const u8) ?RegexT {
                         break :dispatch;
                     }
                     const c_rest = c2 - c1;
-                    var ok = prefixModifier(patt, j, RegOp{ .up_to = c_rest });
-                    if (!ok) {
-                        bad_string = true;
-                        break :dispatch;
+                    if (i + 1 < in.len and in[i + 1] == '+') {
+                        const ok = prefixModifier(patt, j, RegOp{ .eager_up_to = c_rest });
+                        if (!ok) {
+                            bad_string = true;
+                            break :dispatch;
+                        }
+                        i += 1;
+                    } else {
+                        const ok = prefixModifier(patt, j, RegOp{ .up_to = c_rest });
+                        if (!ok) {
+                            bad_string = true;
+                            break :dispatch;
+                        }
                     }
                     j += 1;
-                    ok = prefixModifier(patt, j, RegOp{ .some = c1 });
+                    const ok = prefixModifier(patt, j, RegOp{ .some = c1 });
                     if (!ok) {
                         bad_string = true;
                         break :dispatch;
@@ -2060,6 +2096,9 @@ test "match some things" {
     try testMatchAll("out\\Brage\\Bous", "outrageous");
     try testMatchSlice("\\Brage\\B", "outrageous", "rage");
     try testFail("\\Brage\\B", "rage within the machine");
+    try testMatchAll("a{3,5}+a", "aaaaaa");
+    try testFail("(a[bc]){3,5}+ac", "abacabacac");
+    try testMatchAll("(a[bc]){3,5}ac", "abacabacac");
 
     // https://github.com/mnemnion/mvzr/issues/1#issuecomment-2235265209
     try testMatchAll("[0-9]{4}", "1951");
@@ -2081,6 +2120,7 @@ test "workshop" {
     // try testMatchAll("^[a-zA-Z0-9_!#$%&.-]+@([a-zA-Z0-9.-])+$", "myname.myfirst_name@gmail.com");
     //
 }
+
 test "heap allocated regex and match" {
     try testOwnedRegex("abcde", "abcde");
     try testOwnedRegex("^[a-f0-9]{32}", "0800fc577294c34e0b28ad2839435945");
