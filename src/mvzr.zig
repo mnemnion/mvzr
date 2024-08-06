@@ -8,8 +8,6 @@ const std = @import("std");
 const builtin = @import("builtin");
 const assert = std.debug.assert;
 
-const XXX = false;
-
 // Zig is very particular about the types of shifts.
 const one: u64 = 1;
 
@@ -94,7 +92,7 @@ const OpMatch = struct {
     i: usize,
 };
 
-const Regex: type = SizedRegex(MAX_REGEX_OPS, MAX_CHAR_SETS);
+pub const Regex: type = SizedRegex(MAX_REGEX_OPS, MAX_CHAR_SETS);
 
 pub fn SizedRegex(ops: comptime_int, char_sets: comptime_int) type {
     return struct {

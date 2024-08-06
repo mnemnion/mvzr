@@ -11,7 +11,7 @@ The provided Regex type allows 64 'operations' and 8 unique ASCII character sets
 Drop the file into your project, or use the Zig build system:
 
 ```zig
-zig fetch --save "https://github.com/mnemnion/mvzr/archive/refs/tags/v0.2.0.tar.gz"
+zig fetch --save "https://github.com/mnemnion/mvzr/archive/refs/tags/v0.2.1.tar.gz"
 ```
 
 I'll do my best to keep that URL fresh, but it pays to check over here: ➔
@@ -82,4 +82,4 @@ const SlimmedDownRegex = mvzr.SizedRegex(ops, sets);
 
 ## Bugs
 
-Fewer over time, I hope.  This library isn't up to `0.1` yet, but the test suite never shrinks.
+Fewer over time, I hope.  The test suite never shrinks.
