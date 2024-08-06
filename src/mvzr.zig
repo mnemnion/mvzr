@@ -124,6 +124,25 @@ pub fn SizedRegex(ops: comptime_int, char_sets: comptime_int) type {
             }
         }
 
+        /// Match a regex pattern in `haystack` after `pos`.  Returns a `Match`
+        /// if the pattern is found.
+        pub fn matchPos(regex: *const SizedRegexT, pos: usize, haystack: []const u8) ?Match {
+            const substack = haystack[pos..];
+            if (substack.len == 0) return null;
+            const maybe_matched = regex.matchInternal(substack);
+            if (maybe_matched) |m| {
+                const m1 = pos + m[0];
+                const m2 = pos + m[1];
+                return Match{
+                    .slice = haystack[m1..m2],
+                    .start = m1,
+                    .end = m2,
+                };
+            } else {
+                return null;
+            }
+        }
+
         /// Boolean test if the regex matches in the haystack.
         pub fn isMatch(regex: *const SizedRegexT, haystack: []const u8) bool {
             const maybe_matched = regex.matchInternal(haystack);
@@ -2119,6 +2138,7 @@ test "workshop" {
     // printRegexString("^[a-zA-Z0-9_!#$%&.-]+@([a-zA-Z0-9.-])+$");
     // try testMatchAll("^[a-zA-Z0-9_!#$%&.-]+@([a-zA-Z0-9.-])+$", "myname.myfirst_name@gmail.com");
     //
+    try testMatchAll("(a[bc]){3,5}ac", "abacabacac");
 }
 
 test "heap allocated regex and match" {
@@ -2165,6 +2185,14 @@ test "iteration" {
     try expectEqualStrings("foo", matched.slice);
     try expectEqualStrings("foo", foo_str[matched.start..matched.end]);
     try expectEqual(null, r_iter.next());
+}
+
+test "matchPos" {
+    const regex = Regex.compile("abcd").?;
+    const matched = regex.matchPos(4, "abcdabcd").?;
+    try expectEqual(4, matched.start);
+    try expectEqualStrings("abcd", matched.slice);
+    try expectEqual(8, matched.end);
 }
 
 test "comptime regex" {
