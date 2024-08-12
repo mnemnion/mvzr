@@ -1807,11 +1807,13 @@ fn parseCharSet(in: []const u8, patt: []RegOp, sets: []CharSet, j: usize, i_in: 
     return .{ i, s };
 }
 
+const logger = std.log.scoped(.mvzr);
+
 fn logError(comptime fmt: []const u8, args: anytype) void {
     if (!builtin.is_test) {
-        std.log.err(fmt, args);
+        logger.err(fmt, args);
     } else {
-        std.log.warn(fmt, args);
+        logger.warn(fmt, args);
     }
 }
 
@@ -2130,13 +2132,6 @@ test "match some things" {
     try testFail("(a+?a+?)+?b", "a" ** 2048);
     // Non-catastropic backtracking #3
     try testFail("^(.*?,){254}P", "12345," ** 255);
-}
-
-test "workshop" {
-    // printRegexString("^[a-zA-Z0-9_!#$%&.-]+@([a-zA-Z0-9.-])+$");
-    // try testMatchAll("^[a-zA-Z0-9_!#$%&.-]+@([a-zA-Z0-9.-])+$", "myname.myfirst_name@gmail.com");
-    //
-    try testMatchAll("(a[bc]){3,5}ac", "abacabacac");
 }
 
 test "heap allocated regex and match" {
