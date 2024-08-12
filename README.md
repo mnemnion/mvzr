@@ -11,7 +11,7 @@ The provided Regex type allows 64 'operations' and 8 unique ASCII character sets
 Drop the file into your project, or use the Zig build system:
 
 ```zig
-zig fetch --save "https://github.com/mnemnion/mvzr/archive/refs/tags/v0.2.1.tar.gz"
+zig fetch --save "https://github.com/mnemnion/mvzr/archive/refs/tags/v0.2.2.tar.gz"
 ```
 
 I'll do my best to keep that URL fresh, but it pays to check over here: ➔
@@ -80,6 +80,11 @@ const ops, const sets = mvzr.resourcesNeeded("abc?d*[^efgh]++2");
 const SlimmedDownRegex = mvzr.SizedRegex(ops, sets);
 ```
 
+## Compile Errors
+
+If a regex string is unable to compile, `mvzr` will return `null`.  It will also log an informative error message.  While this is useful, it may not be desirable, so `mvzr` uses a [scoped logger](https://ziglang.org/documentation/0.12.0/std/#std.log) with the scope `.mvzr`, to make it easy for a custom logging function to filter those messages out.
+
 ## Bugs
 
 Fewer over time, I hope.  The test suite never shrinks.
+
