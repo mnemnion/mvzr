@@ -125,8 +125,8 @@ pub fn SizedRegex(ops: comptime_int, char_sets: comptime_int) type {
         /// Match a regex pattern in `haystack` after `pos`.  Returns a `Match`
         /// if the pattern is found.
         pub fn matchPos(regex: *const SizedRegexT, pos: usize, haystack: []const u8) ?Match {
+            if (pos >= haystack.len) return null;
             const substack = haystack[pos..];
-            if (substack.len == 0) return null;
             const maybe_matched = regex.matchInternal(substack);
             if (maybe_matched) |m| {
                 const m1 = pos + m[0];
