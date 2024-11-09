@@ -480,7 +480,7 @@ fn matchStar(patt: []const RegOp, sets: []const CharSet, haystack: []const u8, i
         i -= 1;
     } // This might be ok (alts)
 
-    return OpMatch{ .i = i_in, .j = nextPattern(next_patt) };
+    return OpMatch{ .i = i_in, .j = next_patt };
 }
 
 fn matchPlus(patt: []const RegOp, sets: []const CharSet, haystack: []const u8, i: usize) ?OpMatch {
@@ -2218,4 +2218,9 @@ test "date regex" {
 test "alt | on repetition qualifiers" {
     const regex = Regex.compile("0x[a-fA-F0-9]{2,}|[a-fA-F0-9]{2,}").?;
     try expect(regex.isMatch("derived dedicated cede 0xdeadDEAD"));
+}
+
+test "repetition and word break" {
+    const regex = Regex.compile("[de]{2,}\\b").?;
+    try expect(!regex.isMatch("defense"));
 }
