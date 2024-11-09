@@ -840,7 +840,7 @@ fn nextPatternForSome(patt: []const RegOp) usize {
                 return 1 + nextPatternForSome(patt[1..]);
             }
         },
-        .unused => return 0, // or unreachable idk
+        .unused => unreachable,
         else => return 1,
     }
 }
@@ -1154,7 +1154,6 @@ fn prefixModifier(patt: []RegOp, j: usize, op: RegOp) bool {
     // If we already have a modifier, two are not kosher:
     if (find_j > 0) {
         switch (patt[find_j - 1]) {
-            .alt,
             .plus,
             .lazy_optional,
             .lazy_star,
@@ -2194,4 +2193,14 @@ test "comptime regex" {
     try expect(run_match != null);
     const comptime_match = comptime comp_regex.match("foofoofoo");
     try expect(comptime_match != null);
+}
+
+test "date regex" {
+    const match_date = Regex.compile("[0-9]{4}-[0-9]{2}-[0-9]{2}T([0-9]{2}:){2}[0-9]{2}([+|-][0-9]{2}:[0-9]{2})?").?;
+    try expect(match_date.isMatch("2024-01-01T00:00:00"));
+}
+
+test "alt | on repetition qualifiers" {
+    const regex = Regex.compile("0x[a-fA-F0-9]{2,}|[a-fA-F0-9]{2,}").?;
+    try expect(regex.isMatch("derived dedicated cede 0xdeadDEAD"));
 }
