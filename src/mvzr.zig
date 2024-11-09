@@ -4,6 +4,7 @@
 //! A minimalistic, but y'know, viable, Zig regex library.
 //!
 //! Focused on basic support of runtime-provided regular expressions.
+
 const std = @import("std");
 const builtin = @import("builtin");
 const assert = std.debug.assert;
@@ -329,7 +330,22 @@ fn matchPattern(patt: []const RegOp, sets: []const CharSet, haystack: []const u8
                         return null;
                     }
                 },
-                .begin, .plus, .lazy_plus, .eager_plus, .some, .dot, .class, .not_class, .digit, .not_digit, .alpha, .not_alpha, .whitespace, .not_whitespace, .char => return null,
+                .begin,
+                .plus,
+                .lazy_plus,
+                .eager_plus,
+                .some,
+                .dot,
+                .class,
+                .not_class,
+                .digit,
+                .not_digit,
+                .alpha,
+                .not_alpha,
+                .whitespace,
+                .not_whitespace,
+                .char,
+                => return null,
                 .right, .alt, .unused => unreachable,
             }
         }
@@ -578,7 +594,7 @@ fn matchLazyOptional(patt: []const RegOp, sets: []const CharSet, haystack: []con
     const maybe_match = matchPattern(nextPattern(patt), sets, haystack, i);
     if (maybe_match) |m| {
         return m;
-    } // TODO matchEagerOptional prevents a spurious nextPattern test (post refactor)
+    }
     return matchEagerOptional(patt, sets, haystack, i);
 }
 
@@ -1278,7 +1294,6 @@ pub fn compile(in: []const u8) ?Regex {
     return compileRegex(Regex, in);
 }
 
-// TODO this should throw errors
 /// Compile a regex.
 fn compileRegex(RegexT: type, in: []const u8) ?RegexT {
     var out = RegexT{};
