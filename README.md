@@ -88,3 +88,7 @@ If a regex string is unable to compile, `mvzr` will return `null`.  It will also
 
 Fewer over time, I hope.  The test suite never shrinks.
 
+### Bug Reports
+
+Always welcome.  Ideally, presented as a failing test block, with a note on expected behavior.
+
