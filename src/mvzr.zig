@@ -204,7 +204,7 @@ pub fn SizedRegex(ops: comptime_int, char_sets: comptime_int) type {
                 },
                 else => {
                     var matchlen: usize = 0;
-                    while (matchlen < haystack.len) : (matchlen += 1) {
+                    while (matchlen <= haystack.len) : (matchlen += 1) {
                         const matched = matchOuterPattern(patt, &regex.sets, haystack, matchlen);
                         if (matched) |m| {
                             return .{ matchlen, m.i };
@@ -2223,4 +2223,9 @@ test "alt | on repetition qualifiers" {
 test "repetition and word break" {
     const regex = Regex.compile("[de]{2,}\\b").?;
     try expect(!regex.isMatch("defense"));
+}
+
+test "match end" {
+    const regex = Regex.compile("a*$").?;
+    try std.testing.expect(regex.isMatch("bb"));
 }
