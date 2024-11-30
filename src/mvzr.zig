@@ -1748,10 +1748,10 @@ fn parseCharSet(in: []const u8, patt: []RegOp, sets: []CharSet, j: usize, i_in: 
                         break :which in[i + 1];
                     } else if (i + 3 < in.len) {
                         // try for somthing valid
-                        const may_b = valueFor(in[i + 2 ..]);
+                        const may_b = valueFor(in[i + 3 ..]);
                         if (may_b) |b| {
-                            if (in[i + 2] == 'x') {
-                                i += 4; // \ + x + 2 digits
+                            if (in[i + 3] == 'x') {
+                                i += 5; // - + \ + x + 2 digits
                             } else {
                                 i += 2; // \? for all other ?
                             }
@@ -2228,4 +2228,21 @@ test "repetition and word break" {
 test "match end" {
     const regex = Regex.compile("a*$").?;
     try std.testing.expect(regex.isMatch("bb"));
+}
+
+test "c0 regex" {
+    const regex = Regex.compile(
+        \\[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]
+    ).?;
+    try std.testing.expect(regex.isMatch("\x1b"));
+    try std.testing.expect(!regex.isMatch("B"));
+    try std.testing.expect(!regex.isMatch("0"));
+}
+
+test "c1 regex" {
+    if (true) return error.SkipZigTest;
+    const regex = Regex.compile(
+        \\[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]|\xc2[\x80-\x9f]
+    ).?;
+    try std.testing.expect(regex.isMatch("\x1b"));
 }
