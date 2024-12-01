@@ -1195,18 +1195,17 @@ fn prefixModifier(patt: []RegOp, j: usize, op: RegOp) !usize {
     // Try to detect multi-byte characters
     switch (patt[find_j]) {
         .char => |c| {
-            if (0x80 <= c and c <= 0x9f) {
-                // Group a multi-byte.
+            if (0x80 <= c and c <= 0xbf) {
+                // Go back to lead byte:
                 while (find_j > 0 and
                     patt[find_j] == .char and
                     0x80 <= patt[find_j].char and
-                    patt[find_j].char <= 0x9f) : (find_j -= 1)
-                {} // Move forward by two
-                if (find_j > 0) find_j -= 1;
+                    patt[find_j].char <= 0xbf) : (find_j -= 1)
+                {}
                 std.mem.copyBackwards(RegOp, patt[find_j + 2 ..], patt[find_j .. j + 1]);
                 patt[find_j] = op;
                 patt[find_j + 1] = .left;
-                patt[j + 1] = .right;
+                patt[j + 2] = .right;
                 return 2;
             }
         },
@@ -1461,6 +1460,7 @@ fn compileRegex(RegexT: type, in: []const u8) ?RegexT {
                 }
                 const d1, const c1 = parseByte(in[i..]) catch {
                     // This is fine, literal `}`
+                    // TODO: is it?
                     patt[j] = RegOp{ .char = '}' };
                     continue :dispatch;
                 };
@@ -2020,7 +2020,17 @@ fn printPatternInternal(patt: []const RegOp) ?u8 {
         switch (patt[j]) {
             .char,
             => |op| {
-                std.debug.print("{s} {u}", .{ @tagName(patt[j]), op });
+                switch (op) {
+                    0...0x3f => {
+                        std.debug.print("char 0x{x:0>2}", .{op});
+                    },
+                    0x40...0x7e => {
+                        std.debug.print("char '{u}'", .{op});
+                    },
+                    0x7f...0xff => {
+                        std.debug.print("char 0x{x:0>2}", .{op});
+                    },
+                }
             },
             .some,
             .up_to,
@@ -2410,4 +2420,8 @@ test "Multibyte continues" {
 
 test "Uppercase Greek" {
     try testMatchAll("(\\xce[\\x91-\\xa9])+", "ΑΒΓΔΕΖΗΘΙΚΛΜΝΞΟΠΡΣΤΥΦΧΨΩ");
+}
+
+test "M of N multibyte" {
+    try testMatchEnd("abλ{3,5}", "abλλλλ");
 }
