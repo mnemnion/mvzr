@@ -42,6 +42,8 @@ const RegexType = enum(u5) {
     char,
     class,
     not_class,
+    high_class,
+    not_high_class,
     digit,
     not_digit,
     alpha,
@@ -73,8 +75,10 @@ pub const RegOp = union(RegexType) {
     eager_up_to: u8,
     dot: void,
     char: u8, // character byte
-    class: u8, // offset into class array
+    class: u8, // offset into class array (ASCII)
     not_class: u8,
+    high_class: u8, // offset into class array (high bytes)
+    not_high_class: u8,
     digit: void,
     not_digit: void,
     alpha: void,
@@ -277,7 +281,6 @@ pub fn match(haystack: []const u8, pattern: []const u8) ?Match {
     }
 }
 
-// TODO this can just return i, because it is now only called from outside the state machine.
 /// Entry point for matching a pattern.
 fn matchOuterPattern(patt: []const RegOp, sets: []const CharSet, haystack: []const u8, i: usize) ?OpMatch {
     if (findAlt(patt, 0)) |_| {
@@ -338,6 +341,8 @@ fn matchPattern(patt: []const RegOp, sets: []const CharSet, haystack: []const u8
                 .dot,
                 .class,
                 .not_class,
+                .high_class,
+                .not_high_class,
                 .digit,
                 .not_digit,
                 .alpha,
@@ -353,6 +358,8 @@ fn matchPattern(patt: []const RegOp, sets: []const CharSet, haystack: []const u8
             .dot,
             .class,
             .not_class,
+            .high_class,
+            .not_high_class,
             .digit,
             .not_digit,
             .alpha,
@@ -422,9 +429,11 @@ fn matchOne(patt: []const RegOp, sets: []const CharSet, haystack: []const u8, i:
 
 fn matchOneByte(op: RegOp, sets: []const CharSet, c: u8) bool {
     return switch (op) {
-        .dot => true, // we match newlines, deal with it
+        .dot => true, // We match newlines, deal with it
         .class => |c_off| matchClass(sets[c_off], c),
         .not_class => |c_off| !matchClass(sets[c_off], c),
+        .high_class => |c_off| matchHighClass(sets[c_off], c),
+        .not_high_class => |c_off| !matchHighClass(sets[c_off], c),
         .digit => ascii.isDigit(c),
         .not_digit => !ascii.isDigit(c),
         .alpha => isWordChar(c),
@@ -823,11 +832,25 @@ fn matchAlt(patt: []const RegOp, sets: []const CharSet, haystack: []const u8, i:
 
 fn matchClass(set: CharSet, c: u8) bool {
     switch (c) {
-        0...63 => {
+        0...0x3f => {
             const cut_c: u6 = @truncate(c);
             return (set.low | (one << cut_c)) == set.low;
         },
-        64...127 => {
+        0x40...0x7f => {
+            const cut_c: u6 = @truncate(c);
+            return (set.hi | (one << cut_c)) == set.hi;
+        },
+        else => return false,
+    }
+}
+
+fn matchHighClass(set: CharSet, c: u8) bool {
+    switch (c) {
+        0x80...0xbf => {
+            const cut_c: u6 = @truncate(c);
+            return (set.low | (one << cut_c)) == set.low;
+        },
+        0xc0...0xff => {
             const cut_c: u6 = @truncate(c);
             return (set.hi | (one << cut_c)) == set.hi;
         },
@@ -887,6 +910,8 @@ fn nextPattern(patt: []const RegOp) []const RegOp {
         .char,
         .class,
         .not_class,
+        .high_class,
+        .not_high_class,
         .digit,
         .not_digit,
         .alpha,
@@ -1157,13 +1182,33 @@ pub fn resourcesNeeded(comptime in: []const u8) struct { comptime_int, comptime_
 }
 
 /// Move modifiers to prefix position.
-fn prefixModifier(patt: []RegOp, j: usize, op: RegOp) bool {
-    if (j == 0 or patt[j] == .begin) return false;
+fn prefixModifier(patt: []RegOp, j: usize, op: RegOp) !usize {
+    if (j == 0 or patt[j] == .begin) return BadString;
     var find_j = j - 1;
     // travel back before last group
     switch (patt[find_j]) {
         .right => {
             find_j = beforePriorLeft(patt, find_j);
+        },
+        else => {},
+    }
+    // Try to detect multi-byte characters
+    switch (patt[find_j]) {
+        .char => |c| {
+            if (0x80 <= c and c <= 0x9f) {
+                // Group a multi-byte.
+                while (find_j > 0 and
+                    patt[find_j] == .char and
+                    0x80 <= patt[find_j].char and
+                    patt[find_j].char <= 0x9f) : (find_j -= 1)
+                {} // Move forward by two
+                if (find_j > 0) find_j -= 1;
+                std.mem.copyBackwards(RegOp, patt[find_j + 2 ..], patt[find_j .. j + 1]);
+                patt[find_j] = op;
+                patt[find_j + 1] = .left;
+                patt[j + 1] = .right;
+                return 2;
+            }
         },
         else => {},
     }
@@ -1180,12 +1225,12 @@ fn prefixModifier(patt: []RegOp, j: usize, op: RegOp) bool {
             .optional,
             => {
                 logError("found a modifier on a modifier", .{});
-                return false;
+                return BadString;
             }, // Allowed for {M,} and {M,N} purposes
             .some => {
                 if (op != .optional) {
                     logError("found a modifier on a modifier", .{});
-                    return false;
+                    return BadString;
                 } else {
                     find_j -= 1;
                 }
@@ -1193,7 +1238,7 @@ fn prefixModifier(patt: []RegOp, j: usize, op: RegOp) bool {
             .star => {
                 if (op != .some) {
                     logError("found a modifier on a modifier", .{});
-                    return false;
+                    return BadString;
                 }
             },
             .up_to => {
@@ -1204,7 +1249,7 @@ fn prefixModifier(patt: []RegOp, j: usize, op: RegOp) bool {
                     }
                 } else if (op != .some) {
                     logError("found a modifier on a modifier", .{});
-                    return false;
+                    return BadString;
                 }
             },
             else => {},
@@ -1228,7 +1273,7 @@ fn prefixModifier(patt: []RegOp, j: usize, op: RegOp) bool {
         patt[find_j] = move_op;
         move_op = temp_op;
     }
-    return true;
+    return 0;
 }
 
 fn beforePriorLeft(patt: []RegOp, j: usize) usize {
@@ -1307,7 +1352,7 @@ fn compileRegex(RegexT: type, in: []const u8) ?RegexT {
     var bad_string: bool = false;
     var i: usize = 0;
     var j: usize = 0;
-    var s: u8 = 0;
+    var s: usize = 0;
     var pump: usize = 0;
     dispatch: while (i < in.len and j < patt.len) : ({
         j += 1;
@@ -1335,71 +1380,62 @@ fn compileRegex(RegexT: type, in: []const u8) ?RegexT {
             '*' => {
                 if (i + 1 < in.len and in[i + 1] == '?') {
                     i += 1;
-                    const ok = prefixModifier(patt, j, RegOp{ .lazy_star = {} });
-                    if (!ok) {
+                    j += prefixModifier(patt, j, RegOp{ .lazy_star = {} }) catch {
                         bad_string = true;
                         break :dispatch;
-                    }
+                    };
                 } else if (i + 1 < in.len and in[i + 1] == '+') {
                     i += 1;
-                    const ok = prefixModifier(patt, j, RegOp{ .eager_star = {} });
-                    if (!ok) {
+                    j += prefixModifier(patt, j, RegOp{ .eager_star = {} }) catch {
                         bad_string = true;
                         break :dispatch;
-                    }
+                    };
                 } else {
-                    const ok = prefixModifier(patt, j, RegOp{ .star = {} });
-                    if (!ok) {
+                    j += prefixModifier(patt, j, RegOp{ .star = {} }) catch {
                         bad_string = true;
                         break :dispatch;
-                    }
+                    };
                 }
             },
             '?' => {
                 if (i + 1 < in.len and in[i + 1] == '?') {
                     i += 1;
-                    const ok = prefixModifier(patt, j, RegOp{ .lazy_optional = {} });
-                    if (!ok) {
+                    j += prefixModifier(patt, j, RegOp{ .lazy_optional = {} }) catch {
                         bad_string = true;
                         break :dispatch;
-                    }
+                    };
                 } else if (i + 1 < in.len and in[i + 1] == '+') {
                     i += 1;
-                    const ok = prefixModifier(patt, j, RegOp{ .eager_optional = {} });
-                    if (!ok) {
+                    j += prefixModifier(patt, j, RegOp{ .eager_optional = {} }) catch {
                         bad_string = true;
                         break :dispatch;
-                    }
+                    };
                 } else {
-                    const ok = prefixModifier(patt, j, RegOp{ .optional = {} });
-                    if (!ok) {
+                    j += prefixModifier(patt, j, RegOp{ .optional = {} }) catch {
                         bad_string = true;
                         break :dispatch;
-                    }
+                    };
                 }
             },
             '+' => {
                 if (i + 1 < in.len and in[i + 1] == '?') {
                     i += 1;
-                    const ok = prefixModifier(patt, j, RegOp{ .lazy_plus = {} });
-                    if (!ok) {
+                    j += prefixModifier(patt, j, RegOp{ .lazy_plus = {} }) catch {
                         bad_string = true;
                         break :dispatch;
-                    }
+                    };
                 } else if (i + 1 < in.len and in[i + 1] == '+') {
                     //
                     i += 1;
-                    const ok = prefixModifier(patt, j, RegOp{ .eager_plus = {} });
-                    if (!ok) {
+                    j += prefixModifier(patt, j, RegOp{ .eager_plus = {} }) catch {
                         bad_string = true;
                         break :dispatch;
-                    }
+                    };
                 } else {
-                    const ok = prefixModifier(patt, j, RegOp{ .plus = {} });
-                    if (!ok) {
+                    j += prefixModifier(patt, j, RegOp{ .plus = {} }) catch {
                         bad_string = true;
                         break :dispatch;
-                    }
+                    };
                 }
             },
             '{' => { // {M,N} etc, or just character literal is fine
@@ -1412,11 +1448,12 @@ fn compileRegex(RegexT: type, in: []const u8) ?RegexT {
                     };
                     i += d;
                     if (in[i] == '}') { // {,N}
-                        const ok = prefixModifier(patt, j, RegOp{ .up_to = c1 });
-                        if (!ok) {
+                        j += prefixModifier(patt, j, RegOp{ .up_to = c1 }) catch
+                            {
                             bad_string = true;
                             break :dispatch;
-                        } else continue :dispatch;
+                        };
+                        continue :dispatch;
                     } else {
                         bad_string = true;
                         break :dispatch;
@@ -1431,17 +1468,15 @@ fn compileRegex(RegexT: type, in: []const u8) ?RegexT {
                 if (in[i] == ',') { // {M,?
                     i += 1;
                     if (in[i] == '}') { // {M,}
-                        var ok = prefixModifier(patt, j, RegOp{ .star = {} });
-                        if (!ok) {
+                        j += prefixModifier(patt, j, RegOp{ .star = {} }) catch {
                             bad_string = true;
                             break :dispatch;
-                        }
+                        };
                         j += 1;
-                        ok = prefixModifier(patt, j, RegOp{ .some = c1 });
-                        if (!ok) {
+                        j += prefixModifier(patt, j, RegOp{ .some = c1 }) catch {
                             bad_string = true;
                             break :dispatch;
-                        }
+                        };
                         continue :dispatch;
                     } // {M,N}
                     const d2, const c2 = parseByte(in[i..]) catch {
@@ -1460,32 +1495,28 @@ fn compileRegex(RegexT: type, in: []const u8) ?RegexT {
                     }
                     const c_rest = c2 - c1;
                     if (i + 1 < in.len and in[i + 1] == '+') {
-                        const ok = prefixModifier(patt, j, RegOp{ .eager_up_to = c_rest });
-                        if (!ok) {
+                        j += prefixModifier(patt, j, RegOp{ .eager_up_to = c_rest }) catch {
                             bad_string = true;
                             break :dispatch;
-                        }
+                        };
                         i += 1;
                     } else {
-                        const ok = prefixModifier(patt, j, RegOp{ .up_to = c_rest });
-                        if (!ok) {
+                        j += prefixModifier(patt, j, RegOp{ .up_to = c_rest }) catch {
                             bad_string = true;
                             break :dispatch;
-                        }
+                        };
                     }
                     j += 1;
-                    const ok = prefixModifier(patt, j, RegOp{ .some = c1 });
-                    if (!ok) {
+                    j += prefixModifier(patt, j, RegOp{ .some = c1 }) catch {
                         bad_string = true;
                         break :dispatch;
-                    }
+                    };
                 } else if (in[i] == '}') {
                     // {M}
-                    const ok = prefixModifier(patt, j, RegOp{ .some = c1 });
-                    if (!ok) {
+                    j += prefixModifier(patt, j, RegOp{ .some = c1 }) catch {
                         bad_string = true;
                         break :dispatch;
-                    }
+                    };
                 }
             },
             '|' => {
@@ -1557,8 +1588,8 @@ fn compileRegex(RegexT: type, in: []const u8) ?RegexT {
                         },
                         else => |ch| {
                             // Others are accepted as escaped, we don't care
-                            // if they're special, you're not special, I'm no
-                            // your dad, you get the regex you give
+                            // if they're special, you're not special, I'm not
+                            // your Dad, you get the regex you give
                             patt[j] = RegOp{ .char = ch };
                         },
                     }
@@ -1566,7 +1597,7 @@ fn compileRegex(RegexT: type, in: []const u8) ?RegexT {
             },
             '[' => {
                 // character set
-                i, s = parseCharSet(in, patt, sets, j, i, s) catch {
+                i, j, s = parseCharSet(in, patt, sets, j, i, s) catch {
                     bad_string = true;
                     break :dispatch;
                 };
@@ -1606,6 +1637,8 @@ const w_LOW_MASK = d_MASK;
 const s_MASK: u64 = 0x0000000100003e00; // low
 const ALL_MASK: u64 = ~@as(u64, 0);
 
+/// Returns a value for an escaped character. Does not handle character
+/// classes.
 fn valueFor(in: []const u8) ?u8 {
     switch (in[0]) {
         't' => return '\t',
@@ -1619,17 +1652,24 @@ fn valueFor(in: []const u8) ?u8 {
                 // ??? probably malformed but not... yet?
                 return 'x';
             }
-        },
-        128...255 => return null,
+        }, // No unprintables or high bytes here:
+        0x00...0x08,
+        0x0b,
+        0x0c,
+        0x0e...0x1f,
+        0x7f,
+        0x80...0xff,
+        => return null,
         else => return in[0],
     }
 }
 
-fn parseCharSet(in: []const u8, patt: []RegOp, sets: []CharSet, j: usize, i_in: usize, s_in: u8) !struct { usize, u8 } {
+fn parseCharSet(in: []const u8, patt: []RegOp, sets: []CharSet, j: usize, i_in: usize, s: usize) !struct { usize, usize, usize } {
     var i = i_in;
-    var s = s_in;
     var low: u64 = 0;
     var hi: u64 = 0;
+    var follow: u64 = 0;
+    var lead: u64 = 0;
     const this_kind: RegexType = which: {
         if (i + 1 < in.len and in[i + 1] == '^') {
             i += 1;
@@ -1639,11 +1679,13 @@ fn parseCharSet(in: []const u8, patt: []RegOp, sets: []CharSet, j: usize, i_in: 
     i += 1;
     while (i < in.len and in[i] != ']') : (i += 1) {
         // An escape might be a range:
+        var c1_x = false; // Was c1 an \x escape?
         const c1 = which: {
             if (in[i] == '\\') {
                 const may_b = valueFor(in[i + 1 ..]);
                 if (may_b) |b| {
                     if (in[i + 1] == 'x') {
+                        c1_x = true;
                         i += 3; // \ + x + 2 digits
                     } else {
                         i += 1; // \? for all other ?
@@ -1660,14 +1702,14 @@ fn parseCharSet(in: []const u8, patt: []RegOp, sets: []CharSet, j: usize, i_in: 
         if (i + 1 < in.len and in[i + 1] != '-') {
             // normal character class
             switch (c1) {
-                0...63 => {
+                0...0x3f => {
                     const cut_c: u6 = @truncate(c1);
                     low |= one << cut_c;
                 },
-                64...91, 93...127 => {
+                0x40...0x5b, 0x5d...0x7f => {
                     const cut_c: u6 = @truncate(c1);
                     hi |= one << cut_c;
-                },
+                }, // aka 0x5c:
                 '\\' => { // escaped value, we don't care what
                     // thought I had established that already but ok
                     if (i + 1 < in.len) {
@@ -1734,15 +1776,30 @@ fn parseCharSet(in: []const u8, patt: []RegOp, sets: []CharSet, j: usize, i_in: 
                         }
                     }
                 },
-                else => {
-                    logError("Apologies, but multi=byte characters in sets are not supported.\n", .{});
-                    return BadString;
+                0x80...0xff => {
+                    if (!c1_x) {
+                        logError("Apologies!!, but multi-byte characters in sets are not supported: 0x{x}.\n", .{c1});
+                        return BadString;
+                    } else {
+                        switch (c1) {
+                            0x00...0x7f => unreachable,
+                            0x80...0xbf => {
+                                const cut_c: u6 = @truncate(c1);
+                                follow |= one << cut_c;
+                            },
+                            0xc0...0xff => {
+                                const cut_c: u6 = @truncate(c1);
+                                lead |= one << cut_c;
+                            },
+                        }
+                    }
                 },
             }
         } else {
             // if paired, it's a range
             if (i + 2 < in.len and in[i + 2] != ']') {
-                const c_end = which: {
+                var c2_x = false;
+                const c2 = which: {
                     if (in[i + 2] != '\\') {
                         i += 1; // we get one from the while loop
                         break :which in[i + 1];
@@ -1751,6 +1808,7 @@ fn parseCharSet(in: []const u8, patt: []RegOp, sets: []CharSet, j: usize, i_in: 
                         const may_b = valueFor(in[i + 3 ..]);
                         if (may_b) |b| {
                             if (in[i + 3] == 'x') {
+                                c2_x = true;
                                 i += 5; // - + \ + x + 2 digits
                             } else {
                                 i += 2; // \? for all other ?
@@ -1766,32 +1824,59 @@ fn parseCharSet(in: []const u8, patt: []RegOp, sets: []CharSet, j: usize, i_in: 
                         // For now. This will break later
                     }
                 };
-                if (c1 <= c_end) {
-                    for (c1..c_end + 1) |c_range| {
+                if (c1 > 0x80 and !c1_x or c2 > 0x80 and !c2_x) {
+                    logError("Invalid multibytes found in range: 0x{x}, 0x{x}\n", .{ c1, c2 });
+                    return BadString;
+                }
+                if (c1 <= c2) {
+                    for (c1..c2 + 1) |c_range| {
                         switch (c_range) {
-                            0...63 => {
+                            0...0x3f => {
                                 const cut_c: u6 = @truncate(c_range);
                                 low |= one << cut_c;
                             },
-                            64...127 => {
+                            0x40...0x7f => {
                                 const cut_c: u6 = @truncate(c_range);
                                 hi |= one << cut_c;
                             },
-                            else => {
-                                return BadString;
+                            0x80...0xbf => {
+                                const cut_c: u6 = @truncate(c_range);
+                                follow |= one << cut_c;
                             },
+                            0xc0...0xff => {
+                                const cut_c: u6 = @truncate(c_range);
+                                lead |= one << cut_c;
+                            },
+                            else => unreachable,
                         }
                     }
                 } else {
-                    logError("Invalid range: '{u}' > '{u}'\n", .{ c1, c_end });
+                    logError("Invalid range: '{u}' > '{u}'\n", .{ c1, c2 });
                     return BadString;
                 }
             } else { // '-' in set, add c1
                 const c_trunc: u6 = @truncate(c1);
                 switch (c1) {
-                    0...63 => low |= one << c_trunc,
-                    64...127 => hi |= one << c_trunc,
-                    128...255 => return BadString,
+                    0...0x3f => low |= one << c_trunc,
+                    0x40...0x7f => hi |= one << c_trunc,
+                    0x80...0xff => {
+                        if (!c1_x) {
+                            logError("Apologies, but multi-byte characters in sets are not supported.\n", .{});
+                            return BadString;
+                        } else {
+                            switch (c1) {
+                                0x00...0x7f => unreachable,
+                                0x80...0xbf => {
+                                    const cut_c: u6 = @truncate(c1);
+                                    follow |= one << cut_c;
+                                },
+                                0xc0...0xff => {
+                                    const cut_c: u6 = @truncate(c1);
+                                    lead |= one << cut_c;
+                                },
+                            }
+                        }
+                    },
                 }
             }
         }
@@ -1799,7 +1884,74 @@ fn parseCharSet(in: []const u8, patt: []RegOp, sets: []CharSet, j: usize, i_in: 
     if (i == in.len or in[i] != ']') {
         return BadString;
     }
-    const set = CharSet{ .low = low, .hi = hi };
+    if (s > 255) {
+        logError("Passed the hard 256 limit on charsets. Cannot compile.\n", .{});
+        return BadString;
+    }
+    const low_fill = low != 0 or hi != 0;
+    const high_fill = follow != 0 or lead != 0;
+    if (!high_fill) {
+        const new_s = try appendSet(
+            patt,
+            sets,
+            CharSet{ .low = low, .hi = hi },
+            this_kind,
+            j,
+            s,
+        );
+        return .{ i, j, new_s };
+    } else if (high_fill and !low_fill) {
+        const high_kind: RegexType = if (this_kind == .class) .high_class else .not_high_class;
+        const new_s = try appendSet(
+            patt,
+            sets,
+            CharSet{ .low = follow, .hi = lead },
+            high_kind,
+            j,
+            s,
+        );
+        return .{ i, j, new_s };
+    } else {
+        assert(high_fill and low_fill);
+        if (j + 4 > patt.len) {
+            logError("Out of instructions for regex", .{});
+            return BadString;
+        }
+        const high_kind: RegexType = if (this_kind == .class) .high_class else .not_high_class;
+        var new_j = j;
+        patt[new_j] = .left;
+        new_j += 1;
+        var new_s = try appendSet(
+            patt,
+            sets,
+            CharSet{ .low = low, .hi = hi },
+            this_kind,
+            new_j,
+            s,
+        );
+        if (new_s > 255) {
+            logError("Passed the hard 256 limit on charsets. Cannot compile.\n", .{});
+            return BadString;
+        }
+        new_j += 1;
+        patt[new_j] = .alt;
+        new_j += 1;
+        new_s = try appendSet(
+            patt,
+            sets,
+            CharSet{ .low = follow, .hi = lead },
+            high_kind,
+            new_j,
+            new_s,
+        );
+        new_j += 1;
+        patt[new_j] = .right;
+        return .{ i, new_j, new_s };
+    }
+}
+
+fn appendSet(patt: []RegOp, sets: []CharSet, set: CharSet, this_kind: RegexType, j: usize, s_in: usize) !usize {
+    var s = s_in;
     const this_s = findSetIndex(sets, set, s);
     if (this_s >= sets.len) {
         logError("Ran out of character sets (use bigger SizedRegex(ops, sets++)\n", .{});
@@ -1807,18 +1959,18 @@ fn parseCharSet(in: []const u8, patt: []RegOp, sets: []CharSet, j: usize, i_in: 
     }
     sets[this_s] = set;
     if (this_s == s) {
-        if (s == 255) {
-            logError("Passed the hard 256 limit on charsets. Cannot compile.\n", .{});
-            return BadString;
-        }
         s += 1;
     }
     if (this_kind == .class) {
         patt[j] = RegOp{ .class = this_s };
     } else if (this_kind == .not_class) {
         patt[j] = RegOp{ .not_class = this_s };
+    } else if (this_kind == .high_class) {
+        patt[j] = RegOp{ .high_class = this_s };
+    } else if (this_kind == .not_high_class) {
+        patt[j] = RegOp{ .not_high_class = this_s };
     } else unreachable;
-    return .{ i, s };
+    return s;
 }
 
 const logger = std.log.scoped(.mvzr);
@@ -2240,9 +2392,22 @@ test "c0 regex" {
 }
 
 test "c1 regex" {
-    if (true) return error.SkipZigTest;
     const regex = Regex.compile(
-        \\[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]|\xc2[\x80-\x9f]
+        \\\xc2[\x80-\x9f]
     ).?;
-    try std.testing.expect(regex.isMatch("\x1b"));
+    try std.testing.expect(regex.isMatch("\u{80}"));
+}
+
+test "low-high combined" {
+    const regex = Regex.compile("[\\x1b\\xff]+cd").?;
+    try std.testing.expect(regex.isMatch("\x1b\xffcd"));
+}
+
+test "Multibyte continues" {
+    const regex = Regex.compile("Ṥǎ+").?;
+    try std.testing.expect(regex.isMatch("Ṥǎǎǎǎǎ"));
+}
+
+test "Uppercase Greek" {
+    try testMatchAll("(\\xce[\\x91-\\xa9])+", "ΑΒΓΔΕΖΗΘΙΚΛΜΝΞΟΠΡΣΤΥΦΧΨΩ");
 }
