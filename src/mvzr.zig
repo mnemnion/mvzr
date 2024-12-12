@@ -112,7 +112,6 @@ pub fn SizedRegex(ops: comptime_int, char_sets: comptime_int) type {
 
         /// Match a regex pattern in `haystack`, if found, this returns a `Match`.
         pub fn match(regex: *const SizedRegexT, haystack: []const u8) ?Match {
-            if (haystack.len == 0) return null;
             const maybe_matched = regex.matchInternal(haystack);
             if (maybe_matched) |m| {
                 const m1 = m[0];
@@ -2424,4 +2423,21 @@ test "Uppercase Greek" {
 
 test "M of N multibyte" {
     try testMatchEnd("abλ{3,5}", "abλλλλ");
+}
+
+test "zero length match on zero length haystack" {
+    const mvzr = @import("mvzr.zig");
+    const regex = mvzr.compile(".*");
+    const the_match = regex.?.match("");
+    try std.testing.expect(the_match != null);
+    try std.testing.expectEqual(0, the_match.?.start);
+    try std.testing.expectEqual(0, the_match.?.end);
+}
+test "zero length optional match on zero length haystack" {
+    const mvzr = @import("mvzr.zig");
+    const regex = mvzr.compile(".?");
+    const the_match = regex.?.match("");
+    try std.testing.expect(the_match != null);
+    try std.testing.expectEqual(0, the_match.?.start);
+    try std.testing.expectEqual(0, the_match.?.end);
 }
