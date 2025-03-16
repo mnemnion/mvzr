@@ -2426,18 +2426,30 @@ test "M of N multibyte" {
 }
 
 test "zero length match on zero length haystack" {
-    const mvzr = @import("mvzr.zig");
-    const regex = mvzr.compile(".*");
+    const regex = Regex.compile(".*");
     const the_match = regex.?.match("");
-    try std.testing.expect(the_match != null);
-    try std.testing.expectEqual(0, the_match.?.start);
-    try std.testing.expectEqual(0, the_match.?.end);
+    try expect(the_match != null);
+    try expectEqual(0, the_match.?.start);
+    try expectEqual(0, the_match.?.end);
 }
+
 test "zero length optional match on zero length haystack" {
-    const mvzr = @import("mvzr.zig");
-    const regex = mvzr.compile(".?");
+    const regex = Regex.compile(".?");
     const the_match = regex.?.match("");
-    try std.testing.expect(the_match != null);
-    try std.testing.expectEqual(0, the_match.?.start);
-    try std.testing.expectEqual(0, the_match.?.end);
+    try expect(the_match != null);
+    try expectEqual(0, the_match.?.start);
+    try expectEqual(0, the_match.?.end);
+}
+
+test "zero length bookended optional match on zero length haystack" {
+    const regex = Regex.compile("^.?$");
+    const the_match = regex.?.match("");
+    try expect(the_match != null);
+    try expectEqual(0, the_match.?.start);
+    try expectEqual(0, the_match.?.end);
+}
+
+test "mandatory a fails on zero length haystack" {
+    const regex = Regex.compile("a").?;
+    try expectEqual(null, regex.match(""));
 }
