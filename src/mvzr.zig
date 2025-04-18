@@ -332,11 +332,18 @@ fn matchPattern(patt: []const RegOp, sets: []const CharSet, haystack: []const u8
                         return null;
                     }
                 },
+                .some => |how_many| {
+                    if (how_many == 0) {
+                        this_patt = nextPattern(this_patt);
+                        continue :dispatch;
+                    } else {
+                        return null;
+                    }
+                },
                 .begin,
                 .plus,
                 .lazy_plus,
                 .eager_plus,
-                .some,
                 .dot,
                 .class,
                 .not_class,
@@ -1448,9 +1455,9 @@ fn compileRegex(RegexT: type, in: []const u8) ?RegexT {
                     if (in[i] == '}') { // {,N}
                         j += prefixModifier(patt, j, RegOp{ .up_to = c1 }) catch
                             {
-                            bad_string = true;
-                            break :dispatch;
-                        };
+                                bad_string = true;
+                                break :dispatch;
+                            };
                         continue :dispatch;
                     } else {
                         bad_string = true;
@@ -2452,4 +2459,8 @@ test "zero length bookended optional match on zero length haystack" {
 test "mandatory a fails on zero length haystack" {
     const regex = Regex.compile("a").?;
     try expectEqual(null, regex.match(""));
+}
+
+test "some == 0 is an optional for termination" {
+    try testMatchAll("^[A-Za-z][0-9A-Za-z]{0,19}$", "x");
 }
