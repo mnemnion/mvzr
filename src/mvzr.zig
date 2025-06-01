@@ -2464,3 +2464,7 @@ test "mandatory a fails on zero length haystack" {
 test "some == 0 is an optional for termination" {
     try testMatchAll("^[A-Za-z][0-9A-Za-z]{0,19}$", "x");
 }
+
+test "word boundary with zero length haystack" {
+    try testFail("\\b", "");
+}
