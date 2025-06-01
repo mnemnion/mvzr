@@ -781,7 +781,7 @@ fn matchGroup(patt: []const RegOp, sets: []const CharSet, haystack: []const u8, 
 
 fn matchWordBreak(patt: []const RegOp, sets: []const CharSet, haystack: []const u8, i: usize) ?OpMatch {
     if (i == haystack.len) {
-        if (isWordChar(haystack[i - 1])) {
+        if (i > 0 and isWordChar(haystack[i - 1])) {
             return OpMatch{ .i = i, .j = nextPattern(patt) };
         } else {
             return null;
