@@ -310,7 +310,9 @@ fn matchPattern(patt: []const RegOp, sets: []const CharSet, haystack: []const u8
     dispatch: while (this_patt.len != 0) {
         if (i == haystack.len) {
             switch (this_patt[0]) {
-                .word_break, .not_word_break => {},
+                .word_break, .not_word_break => {
+                    if (haystack.len == 0) return null;
+                },
                 .optional,
                 .star,
                 .lazy_optional,
@@ -2497,4 +2499,9 @@ test "rewrites coin address at the end" {
     try expect(bogus_coin.isMatch(bogo_string));
     const a_match = bogus_coin.match(bogo_string).?;
     _ = a_match;
+}
+
+test "word boundary with zero length haystack" {
+    // Courtesy apvanzanten: https://github.com/mnemnion/mvzr/pull/8
+    try testFail("\\b", "");
 }
