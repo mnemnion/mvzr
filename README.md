@@ -2,7 +2,7 @@
 
 Finding myself in need of a regular expressions library for a Zig project, and needing it to build regex at runtime, not just comptime, I ended up speedrunning a little library for just that purpose.
 
-This is that library.  It's a simple bytecode-based Commander Pike-style VM.  Under 2000 lines of load-bearing code, no dependencies other than `std`.
+This is that library.  It's a simple bytecode-based VM, inspired by [LPEG](https://www.inf.puc-rio.br/~roberto/docs/peg.pdf).  Under 2000 lines of load-bearing code, no dependencies other than `std`.
 
 The provided Regex type allows 64 'operations' and 8 unique ASCII character sets.  If you would like more, or less, you can call `SizedRegex(num_ops, num_sets)` to customize the type.
 
