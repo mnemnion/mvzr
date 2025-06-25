@@ -471,7 +471,7 @@ fn matchStar(patt: []const RegOp, sets: []const CharSet, haystack: []const u8, i
             return OpMatch{ .i = i, .j = next_patt };
         } else {
             // We're not done, back off a bit
-            i -= 1; // Haystack always has len > 0
+            i -= 1; // Haystack always has len > 0 when this is reached.
         }
     }
 
@@ -482,6 +482,9 @@ fn matchStar(patt: []const RegOp, sets: []const CharSet, haystack: []const u8, i
     // TODO this logic is wrong because /our/ pattern might not match at every point in the string.
     // fix that later (I have something in mind here: a mask storing an intersection of every real
     // match for us, with a potential match for the next guy)
+    //
+    // Theory: if we switch to matchLazyStar here, starting from the beginning, we always get what
+    // we came for, but pay the minimum amount for it.
     i = if (i == i_in) i_in else (i - 1);
     while (true) {
         const try_next = matchPattern(next_patt, sets, haystack, i);
@@ -718,7 +721,7 @@ fn matchUpToInner(
 fn matchEagerUpTo(patt: []const RegOp, sets: []const CharSet, haystack: []const u8, i_in: usize) OpMatch {
     const this_patt = thisPattern(patt[1..]);
     const first_match = matchPattern(this_patt, sets, haystack, i_in);
-    if (first_match == null) return OpMatch{ .i = 0, .j = nextPattern(patt) };
+    if (first_match == null) return OpMatch{ .i = i_in, .j = nextPattern(patt) };
     // Keep it up
     var latest_match: OpMatch = first_match.?;
     var count = patt[0].eager_up_to - 1;
@@ -754,6 +757,9 @@ fn matchGroup(patt: []const RegOp, sets: []const CharSet, haystack: []const u8, 
     } // There's at least one alt.
     // Is there another pattern to check?
     if (next_patt.len == 0) {
+        // NOTE: This is where we might implement 'leftmost longest'.  Current
+        // behavior short-circuits on the first match, but we can keep trying
+        // and keep the longest of any matches.
         const our_match = matchAlt(inner_patt, sets, haystack, i);
         if (our_match) |m| {
             // Strip the remaining matches, may as well use empty next_patt
@@ -2040,6 +2046,7 @@ fn printPatternInternal(patt: []const RegOp) ?u8 {
             },
             .some,
             .up_to,
+            .eager_up_to,
             => |op| {
                 std.debug.print("{s} {d}", .{ @tagName(patt[j]), op });
             },
@@ -2463,4 +2470,31 @@ test "mandatory a fails on zero length haystack" {
 
 test "some == 0 is an optional for termination" {
     try testMatchAll("^[A-Za-z][0-9A-Za-z]{0,19}$", "x");
+}
+
+test "mvzr compile in releasesafe mode" {
+    const hi = compile("test");
+    try std.testing.expect(hi != null);
+    try std.testing.expect(hi.?.isMatch("test"));
+}
+
+test "mvzr is not longest-leftmost" {
+    const fubar = compile("(foo|foobar)").?;
+    const the_match = fubar.match("foobar");
+    if (the_match) |is_foo| {
+        try expectEqualStrings("foo", is_foo.slice);
+    }
+}
+
+test "do not make this test any longer" {
+    // Proof of exponential growth due to ?
+    try testMatchAll("a?a?a?a?a?a?a?aaaaaaa", "aaaaaaa");
+}
+
+test "rewrites coin address at the end" {
+    const bogus_coin = compile("7[a-zA-Z0-9]{25,34}+").?;
+    const bogo_string = "Send the boguscoins to 7YWHMfk9JZe123123123123123\n";
+    try expect(bogus_coin.isMatch(bogo_string));
+    const a_match = bogus_coin.match(bogo_string).?;
+    _ = a_match;
 }

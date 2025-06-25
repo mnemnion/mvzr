@@ -1,0 +1,1102 @@
+test
++- run test stderr
+optional entered at 0
+optional entered at 1
+optional entered at 2
+optional entered at 3
+optional entered at 4
+optional entered at 5
+optional entered at 6
+lazy optional entered at 6
+lazy optional entered at 5
+optional entered at 5
+lazy optional entered at 5
+optional entered at 6
+lazy optional entered at 6
+lazy optional entered at 4
+optional entered at 4
+optional entered at 5
+lazy optional entered at 5
+lazy optional entered at 4
+optional entered at 4
+lazy optional entered at 4
+optional entered at 5
+lazy optional entered at 5
+optional entered at 5
+optional entered at 6
+lazy optional entered at 6
+lazy optional entered at 5
+optional entered at 5
+lazy optional entered at 5
+optional entered at 6
+lazy optional entered at 6
+lazy optional entered at 3
+optional entered at 3
+optional entered at 4
+optional entered at 5
+lazy optional entered at 5
+lazy optional entered at 4
+optional entered at 4
+lazy optional entered at 4
+optional entered at 5
+lazy optional entered at 5
+lazy optional entered at 3
+optional entered at 3
+optional entered at 4
+lazy optional entered at 4
+lazy optional entered at 3
+optional entered at 3
+lazy optional entered at 3
+optional entered at 4
+lazy optional entered at 4
+optional entered at 4
+optional entered at 5
+lazy optional entered at 5
+lazy optional entered at 4
+optional entered at 4
+lazy optional entered at 4
+optional entered at 5
+lazy optional entered at 5
+optional entered at 4
+optional entered at 5
+optional entered at 6
+lazy optional entered at 6
+lazy optional entered at 5
+optional entered at 5
+lazy optional entered at 5
+optional entered at 6
+lazy optional entered at 6
+lazy optional entered at 4
+optional entered at 4
+optional entered at 5
+lazy optional entered at 5
+lazy optional entered at 4
+optional entered at 4
+lazy optional entered at 4
+optional entered at 5
+lazy optional entered at 5
+optional entered at 5
+optional entered at 6
+lazy optional entered at 6
+lazy optional entered at 5
+optional entered at 5
+lazy optional entered at 5
+optional entered at 6
+lazy optional entered at 6
+lazy optional entered at 2
+optional entered at 2
+optional entered at 3
+optional entered at 4
+optional entered at 5
+lazy optional entered at 5
+lazy optional entered at 4
+optional entered at 4
+lazy optional entered at 4
+optional entered at 5
+lazy optional entered at 5
+lazy optional entered at 3
+optional entered at 3
+optional entered at 4
+lazy optional entered at 4
+lazy optional entered at 3
+optional entered at 3
+lazy optional entered at 3
+optional entered at 4
+lazy optional entered at 4
+optional entered at 4
+optional entered at 5
+lazy optional entered at 5
+lazy optional entered at 4
+optional entered at 4
+lazy optional entered at 4
+optional entered at 5
+lazy optional entered at 5
+lazy optional entered at 2
+optional entered at 2
+optional entered at 3
+optional entered at 4
+lazy optional entered at 4
+lazy optional entered at 3
+optional entered at 3
+lazy optional entered at 3
+optional entered at 4
+lazy optional entered at 4
+lazy optional entered at 2
+optional entered at 2
+optional entered at 3
+lazy optional entered at 3
+lazy optional entered at 2
+optional entered at 2
+lazy optional entered at 2
+optional entered at 3
+lazy optional entered at 3
+optional entered at 3
+optional entered at 4
+lazy optional entered at 4
+lazy optional entered at 3
+optional entered at 3
+lazy optional entered at 3
+optional entered at 4
+lazy optional entered at 4
+optional entered at 3
+optional entered at 4
+optional entered at 5
+lazy optional entered at 5
+lazy optional entered at 4
+optional entered at 4
+lazy optional entered at 4
+optional entered at 5
+lazy optional entered at 5
+lazy optional entered at 3
+optional entered at 3
+optional entered at 4
+lazy optional entered at 4
+lazy optional entered at 3
+optional entered at 3
+lazy optional entered at 3
+optional entered at 4
+lazy optional entered at 4
+optional entered at 4
+optional entered at 5
+lazy optional entered at 5
+lazy optional entered at 4
+optional entered at 4
+lazy optional entered at 4
+optional entered at 5
+lazy optional entered at 5
+optional entered at 3
+optional entered at 4
+optional entered at 5
+optional entered at 6
+lazy optional entered at 6
+lazy optional entered at 5
+optional entered at 5
+lazy optional entered at 5
+optional entered at 6
+lazy optional entered at 6
+lazy optional entered at 4
+optional entered at 4
+optional entered at 5
+lazy optional entered at 5
+lazy optional entered at 4
+optional entered at 4
+lazy optional entered at 4
+optional entered at 5
+lazy optional entered at 5
+optional entered at 5
+optional entered at 6
+lazy optional entered at 6
+lazy optional entered at 5
+optional entered at 5
+lazy optional entered at 5
+optional entered at 6
+lazy optional entered at 6
+lazy optional entered at 3
+optional entered at 3
+optional entered at 4
+optional entered at 5
+lazy optional entered at 5
+lazy optional entered at 4
+optional entered at 4
+lazy optional entered at 4
+optional entered at 5
+lazy optional entered at 5
+lazy optional entered at 3
+optional entered at 3
+optional entered at 4
+lazy optional entered at 4
+lazy optional entered at 3
+optional entered at 3
+lazy optional entered at 3
+optional entered at 4
+lazy optional entered at 4
+optional entered at 4
+optional entered at 5
+lazy optional entered at 5
+lazy optional entered at 4
+optional entered at 4
+lazy optional entered at 4
+optional entered at 5
+lazy optional entered at 5
+optional entered at 4
+optional entered at 5
+optional entered at 6
+lazy optional entered at 6
+lazy optional entered at 5
+optional entered at 5
+lazy optional entered at 5
+optional entered at 6
+lazy optional entered at 6
+lazy optional entered at 4
+optional entered at 4
+optional entered at 5
+lazy optional entered at 5
+lazy optional entered at 4
+optional entered at 4
+lazy optional entered at 4
+optional entered at 5
+lazy optional entered at 5
+optional entered at 5
+optional entered at 6
+lazy optional entered at 6
+lazy optional entered at 5
+optional entered at 5
+lazy optional entered at 5
+optional entered at 6
+lazy optional entered at 6
+lazy optional entered at 1
+optional entered at 1
+optional entered at 2
+optional entered at 3
+optional entered at 4
+optional entered at 5
+lazy optional entered at 5
+lazy optional entered at 4
+optional entered at 4
+lazy optional entered at 4
+optional entered at 5
+lazy optional entered at 5
+lazy optional entered at 3
+optional entered at 3
+optional entered at 4
+lazy optional entered at 4
+lazy optional entered at 3
+optional entered at 3
+lazy optional entered at 3
+optional entered at 4
+lazy optional entered at 4
+optional entered at 4
+optional entered at 5
+lazy optional entered at 5
+lazy optional entered at 4
+optional entered at 4
+lazy optional entered at 4
+optional entered at 5
+lazy optional entered at 5
+lazy optional entered at 2
+optional entered at 2
+optional entered at 3
+optional entered at 4
+lazy optional entered at 4
+lazy optional entered at 3
+optional entered at 3
+lazy optional entered at 3
+optional entered at 4
+lazy optional entered at 4
+lazy optional entered at 2
+optional entered at 2
+optional entered at 3
+lazy optional entered at 3
+lazy optional entered at 2
+optional entered at 2
+lazy optional entered at 2
+optional entered at 3
+lazy optional entered at 3
+optional entered at 3
+optional entered at 4
+lazy optional entered at 4
+lazy optional entered at 3
+optional entered at 3
+lazy optional entered at 3
+optional entered at 4
+lazy optional entered at 4
+optional entered at 3
+optional entered at 4
+optional entered at 5
+lazy optional entered at 5
+lazy optional entered at 4
+optional entered at 4
+lazy optional entered at 4
+optional entered at 5
+lazy optional entered at 5
+lazy optional entered at 3
+optional entered at 3
+optional entered at 4
+lazy optional entered at 4
+lazy optional entered at 3
+optional entered at 3
+lazy optional entered at 3
+optional entered at 4
+lazy optional entered at 4
+optional entered at 4
+optional entered at 5
+lazy optional entered at 5
+lazy optional entered at 4
+optional entered at 4
+lazy optional entered at 4
+optional entered at 5
+lazy optional entered at 5
+lazy optional entered at 1
+optional entered at 1
+optional entered at 2
+optional entered at 3
+optional entered at 4
+lazy optional entered at 4
+lazy optional entered at 3
+optional entered at 3
+lazy optional entered at 3
+optional entered at 4
+lazy optional entered at 4
+lazy optional entered at 2
+optional entered at 2
+optional entered at 3
+lazy optional entered at 3
+lazy optional entered at 2
+optional entered at 2
+lazy optional entered at 2
+optional entered at 3
+lazy optional entered at 3
+optional entered at 3
+optional entered at 4
+lazy optional entered at 4
+lazy optional entered at 3
+optional entered at 3
+lazy optional entered at 3
+optional entered at 4
+lazy optional entered at 4
+lazy optional entered at 1
+optional entered at 1
+optional entered at 2
+optional entered at 3
+lazy optional entered at 3
+lazy optional entered at 2
+optional entered at 2
+lazy optional entered at 2
+optional entered at 3
+lazy optional entered at 3
+lazy optional entered at 1
+optional entered at 1
+optional entered at 2
+lazy optional entered at 2
+lazy optional entered at 1
+optional entered at 1
+lazy optional entered at 1
+optional entered at 2
+lazy optional entered at 2
+optional entered at 2
+optional entered at 3
+lazy optional entered at 3
+lazy optional entered at 2
+optional entered at 2
+lazy optional entered at 2
+optional entered at 3
+lazy optional entered at 3
+optional entered at 2
+optional entered at 3
+optional entered at 4
+lazy optional entered at 4
+lazy optional entered at 3
+optional entered at 3
+lazy optional entered at 3
+optional entered at 4
+lazy optional entered at 4
+lazy optional entered at 2
+optional entered at 2
+optional entered at 3
+lazy optional entered at 3
+lazy optional entered at 2
+optional entered at 2
+lazy optional entered at 2
+optional entered at 3
+lazy optional entered at 3
+optional entered at 3
+optional entered at 4
+lazy optional entered at 4
+lazy optional entered at 3
+optional entered at 3
+lazy optional entered at 3
+optional entered at 4
+lazy optional entered at 4
+optional entered at 2
+optional entered at 3
+optional entered at 4
+optional entered at 5
+lazy optional entered at 5
+lazy optional entered at 4
+optional entered at 4
+lazy optional entered at 4
+optional entered at 5
+lazy optional entered at 5
+lazy optional entered at 3
+optional entered at 3
+optional entered at 4
+lazy optional entered at 4
+lazy optional entered at 3
+optional entered at 3
+lazy optional entered at 3
+optional entered at 4
+lazy optional entered at 4
+optional entered at 4
+optional entered at 5
+lazy optional entered at 5
+lazy optional entered at 4
+optional entered at 4
+lazy optional entered at 4
+optional entered at 5
+lazy optional entered at 5
+lazy optional entered at 2
+optional entered at 2
+optional entered at 3
+optional entered at 4
+lazy optional entered at 4
+lazy optional entered at 3
+optional entered at 3
+lazy optional entered at 3
+optional entered at 4
+lazy optional entered at 4
+lazy optional entered at 2
+optional entered at 2
+optional entered at 3
+lazy optional entered at 3
+lazy optional entered at 2
+optional entered at 2
+lazy optional entered at 2
+optional entered at 3
+lazy optional entered at 3
+optional entered at 3
+optional entered at 4
+lazy optional entered at 4
+lazy optional entered at 3
+optional entered at 3
+lazy optional entered at 3
+optional entered at 4
+lazy optional entered at 4
+optional entered at 3
+optional entered at 4
+optional entered at 5
+lazy optional entered at 5
+lazy optional entered at 4
+optional entered at 4
+lazy optional entered at 4
+optional entered at 5
+lazy optional entered at 5
+lazy optional entered at 3
+optional entered at 3
+optional entered at 4
+lazy optional entered at 4
+lazy optional entered at 3
+optional entered at 3
+lazy optional entered at 3
+optional entered at 4
+lazy optional entered at 4
+optional entered at 4
+optional entered at 5
+lazy optional entered at 5
+lazy optional entered at 4
+optional entered at 4
+lazy optional entered at 4
+optional entered at 5
+lazy optional entered at 5
+optional entered at 2
+optional entered at 3
+optional entered at 4
+optional entered at 5
+optional entered at 6
+lazy optional entered at 6
+lazy optional entered at 5
+optional entered at 5
+lazy optional entered at 5
+optional entered at 6
+lazy optional entered at 6
+lazy optional entered at 4
+optional entered at 4
+optional entered at 5
+lazy optional entered at 5
+lazy optional entered at 4
+optional entered at 4
+lazy optional entered at 4
+optional entered at 5
+lazy optional entered at 5
+optional entered at 5
+optional entered at 6
+lazy optional entered at 6
+lazy optional entered at 5
+optional entered at 5
+lazy optional entered at 5
+optional entered at 6
+lazy optional entered at 6
+lazy optional entered at 3
+optional entered at 3
+optional entered at 4
+optional entered at 5
+lazy optional entered at 5
+lazy optional entered at 4
+optional entered at 4
+lazy optional entered at 4
+optional entered at 5
+lazy optional entered at 5
+lazy optional entered at 3
+optional entered at 3
+optional entered at 4
+lazy optional entered at 4
+lazy optional entered at 3
+optional entered at 3
+lazy optional entered at 3
+optional entered at 4
+lazy optional entered at 4
+optional entered at 4
+optional entered at 5
+lazy optional entered at 5
+lazy optional entered at 4
+optional entered at 4
+lazy optional entered at 4
+optional entered at 5
+lazy optional entered at 5
+optional entered at 4
+optional entered at 5
+optional entered at 6
+lazy optional entered at 6
+lazy optional entered at 5
+optional entered at 5
+lazy optional entered at 5
+optional entered at 6
+lazy optional entered at 6
+lazy optional entered at 4
+optional entered at 4
+optional entered at 5
+lazy optional entered at 5
+lazy optional entered at 4
+optional entered at 4
+lazy optional entered at 4
+optional entered at 5
+lazy optional entered at 5
+optional entered at 5
+optional entered at 6
+lazy optional entered at 6
+lazy optional entered at 5
+optional entered at 5
+lazy optional entered at 5
+optional entered at 6
+lazy optional entered at 6
+lazy optional entered at 2
+optional entered at 2
+optional entered at 3
+optional entered at 4
+optional entered at 5
+lazy optional entered at 5
+lazy optional entered at 4
+optional entered at 4
+lazy optional entered at 4
+optional entered at 5
+lazy optional entered at 5
+lazy optional entered at 3
+optional entered at 3
+optional entered at 4
+lazy optional entered at 4
+lazy optional entered at 3
+optional entered at 3
+lazy optional entered at 3
+optional entered at 4
+lazy optional entered at 4
+optional entered at 4
+optional entered at 5
+lazy optional entered at 5
+lazy optional entered at 4
+optional entered at 4
+lazy optional entered at 4
+optional entered at 5
+lazy optional entered at 5
+lazy optional entered at 2
+optional entered at 2
+optional entered at 3
+optional entered at 4
+lazy optional entered at 4
+lazy optional entered at 3
+optional entered at 3
+lazy optional entered at 3
+optional entered at 4
+lazy optional entered at 4
+lazy optional entered at 2
+optional entered at 2
+optional entered at 3
+lazy optional entered at 3
+lazy optional entered at 2
+optional entered at 2
+lazy optional entered at 2
+optional entered at 3
+lazy optional entered at 3
+optional entered at 3
+optional entered at 4
+lazy optional entered at 4
+lazy optional entered at 3
+optional entered at 3
+lazy optional entered at 3
+optional entered at 4
+lazy optional entered at 4
+optional entered at 3
+optional entered at 4
+optional entered at 5
+lazy optional entered at 5
+lazy optional entered at 4
+optional entered at 4
+lazy optional entered at 4
+optional entered at 5
+lazy optional entered at 5
+lazy optional entered at 3
+optional entered at 3
+optional entered at 4
+lazy optional entered at 4
+lazy optional entered at 3
+optional entered at 3
+lazy optional entered at 3
+optional entered at 4
+lazy optional entered at 4
+optional entered at 4
+optional entered at 5
+lazy optional entered at 5
+lazy optional entered at 4
+optional entered at 4
+lazy optional entered at 4
+optional entered at 5
+lazy optional entered at 5
+optional entered at 3
+optional entered at 4
+optional entered at 5
+optional entered at 6
+lazy optional entered at 6
+lazy optional entered at 5
+optional entered at 5
+lazy optional entered at 5
+optional entered at 6
+lazy optional entered at 6
+lazy optional entered at 4
+optional entered at 4
+optional entered at 5
+lazy optional entered at 5
+lazy optional entered at 4
+optional entered at 4
+lazy optional entered at 4
+optional entered at 5
+lazy optional entered at 5
+optional entered at 5
+optional entered at 6
+lazy optional entered at 6
+lazy optional entered at 5
+optional entered at 5
+lazy optional entered at 5
+optional entered at 6
+lazy optional entered at 6
+lazy optional entered at 3
+optional entered at 3
+optional entered at 4
+optional entered at 5
+lazy optional entered at 5
+lazy optional entered at 4
+optional entered at 4
+lazy optional entered at 4
+optional entered at 5
+lazy optional entered at 5
+lazy optional entered at 3
+optional entered at 3
+optional entered at 4
+lazy optional entered at 4
+lazy optional entered at 3
+optional entered at 3
+lazy optional entered at 3
+optional entered at 4
+lazy optional entered at 4
+optional entered at 4
+optional entered at 5
+lazy optional entered at 5
+lazy optional entered at 4
+optional entered at 4
+lazy optional entered at 4
+optional entered at 5
+lazy optional entered at 5
+optional entered at 4
+optional entered at 5
+optional entered at 6
+lazy optional entered at 6
+lazy optional entered at 5
+optional entered at 5
+lazy optional entered at 5
+optional entered at 6
+lazy optional entered at 6
+lazy optional entered at 4
+optional entered at 4
+optional entered at 5
+lazy optional entered at 5
+lazy optional entered at 4
+optional entered at 4
+lazy optional entered at 4
+optional entered at 5
+lazy optional entered at 5
+optional entered at 5
+optional entered at 6
+lazy optional entered at 6
+lazy optional entered at 5
+optional entered at 5
+lazy optional entered at 5
+optional entered at 6
+lazy optional entered at 6
+lazy optional entered at 0
+optional entered at 0
+optional entered at 1
+optional entered at 2
+optional entered at 3
+optional entered at 4
+optional entered at 5
+lazy optional entered at 5
+lazy optional entered at 4
+optional entered at 4
+lazy optional entered at 4
+optional entered at 5
+lazy optional entered at 5
+lazy optional entered at 3
+optional entered at 3
+optional entered at 4
+lazy optional entered at 4
+lazy optional entered at 3
+optional entered at 3
+lazy optional entered at 3
+optional entered at 4
+lazy optional entered at 4
+optional entered at 4
+optional entered at 5
+lazy optional entered at 5
+lazy optional entered at 4
+optional entered at 4
+lazy optional entered at 4
+optional entered at 5
+lazy optional entered at 5
+lazy optional entered at 2
+optional entered at 2
+optional entered at 3
+optional entered at 4
+lazy optional entered at 4
+lazy optional entered at 3
+optional entered at 3
+lazy optional entered at 3
+optional entered at 4
+lazy optional entered at 4
+lazy optional entered at 2
+optional entered at 2
+optional entered at 3
+lazy optional entered at 3
+lazy optional entered at 2
+optional entered at 2
+lazy optional entered at 2
+optional entered at 3
+lazy optional entered at 3
+optional entered at 3
+optional entered at 4
+lazy optional entered at 4
+lazy optional entered at 3
+optional entered at 3
+lazy optional entered at 3
+optional entered at 4
+lazy optional entered at 4
+optional entered at 3
+optional entered at 4
+optional entered at 5
+lazy optional entered at 5
+lazy optional entered at 4
+optional entered at 4
+lazy optional entered at 4
+optional entered at 5
+lazy optional entered at 5
+lazy optional entered at 3
+optional entered at 3
+optional entered at 4
+lazy optional entered at 4
+lazy optional entered at 3
+optional entered at 3
+lazy optional entered at 3
+optional entered at 4
+lazy optional entered at 4
+optional entered at 4
+optional entered at 5
+lazy optional entered at 5
+lazy optional entered at 4
+optional entered at 4
+lazy optional entered at 4
+optional entered at 5
+lazy optional entered at 5
+lazy optional entered at 1
+optional entered at 1
+optional entered at 2
+optional entered at 3
+optional entered at 4
+lazy optional entered at 4
+lazy optional entered at 3
+optional entered at 3
+lazy optional entered at 3
+optional entered at 4
+lazy optional entered at 4
+lazy optional entered at 2
+optional entered at 2
+optional entered at 3
+lazy optional entered at 3
+lazy optional entered at 2
+optional entered at 2
+lazy optional entered at 2
+optional entered at 3
+lazy optional entered at 3
+optional entered at 3
+optional entered at 4
+lazy optional entered at 4
+lazy optional entered at 3
+optional entered at 3
+lazy optional entered at 3
+optional entered at 4
+lazy optional entered at 4
+lazy optional entered at 1
+optional entered at 1
+optional entered at 2
+optional entered at 3
+lazy optional entered at 3
+lazy optional entered at 2
+optional entered at 2
+lazy optional entered at 2
+optional entered at 3
+lazy optional entered at 3
+lazy optional entered at 1
+optional entered at 1
+optional entered at 2
+lazy optional entered at 2
+lazy optional entered at 1
+optional entered at 1
+lazy optional entered at 1
+optional entered at 2
+lazy optional entered at 2
+optional entered at 2
+optional entered at 3
+lazy optional entered at 3
+lazy optional entered at 2
+optional entered at 2
+lazy optional entered at 2
+optional entered at 3
+lazy optional entered at 3
+optional entered at 2
+optional entered at 3
+optional entered at 4
+lazy optional entered at 4
+lazy optional entered at 3
+optional entered at 3
+lazy optional entered at 3
+optional entered at 4
+lazy optional entered at 4
+lazy optional entered at 2
+optional entered at 2
+optional entered at 3
+lazy optional entered at 3
+lazy optional entered at 2
+optional entered at 2
+lazy optional entered at 2
+optional entered at 3
+lazy optional entered at 3
+optional entered at 3
+optional entered at 4
+lazy optional entered at 4
+lazy optional entered at 3
+optional entered at 3
+lazy optional entered at 3
+optional entered at 4
+lazy optional entered at 4
+optional entered at 2
+optional entered at 3
+optional entered at 4
+optional entered at 5
+lazy optional entered at 5
+lazy optional entered at 4
+optional entered at 4
+lazy optional entered at 4
+optional entered at 5
+lazy optional entered at 5
+lazy optional entered at 3
+optional entered at 3
+optional entered at 4
+lazy optional entered at 4
+lazy optional entered at 3
+optional entered at 3
+lazy optional entered at 3
+optional entered at 4
+lazy optional entered at 4
+optional entered at 4
+optional entered at 5
+lazy optional entered at 5
+lazy optional entered at 4
+optional entered at 4
+lazy optional entered at 4
+optional entered at 5
+lazy optional entered at 5
+lazy optional entered at 2
+optional entered at 2
+optional entered at 3
+optional entered at 4
+lazy optional entered at 4
+lazy optional entered at 3
+optional entered at 3
+lazy optional entered at 3
+optional entered at 4
+lazy optional entered at 4
+lazy optional entered at 2
+optional entered at 2
+optional entered at 3
+lazy optional entered at 3
+lazy optional entered at 2
+optional entered at 2
+lazy optional entered at 2
+optional entered at 3
+lazy optional entered at 3
+optional entered at 3
+optional entered at 4
+lazy optional entered at 4
+lazy optional entered at 3
+optional entered at 3
+lazy optional entered at 3
+optional entered at 4
+lazy optional entered at 4
+optional entered at 3
+optional entered at 4
+optional entered at 5
+lazy optional entered at 5
+lazy optional entered at 4
+optional entered at 4
+lazy optional entered at 4
+optional entered at 5
+lazy optional entered at 5
+lazy optional entered at 3
+optional entered at 3
+optional entered at 4
+lazy optional entered at 4
+lazy optional entered at 3
+optional entered at 3
+lazy optional entered at 3
+optional entered at 4
+lazy optional entered at 4
+optional entered at 4
+optional entered at 5
+lazy optional entered at 5
+lazy optional entered at 4
+optional entered at 4
+lazy optional entered at 4
+optional entered at 5
+lazy optional entered at 5
+lazy optional entered at 0
+optional entered at 0
+optional entered at 1
+optional entered at 2
+optional entered at 3
+optional entered at 4
+lazy optional entered at 4
+lazy optional entered at 3
+optional entered at 3
+lazy optional entered at 3
+optional entered at 4
+lazy optional entered at 4
+lazy optional entered at 2
+optional entered at 2
+optional entered at 3
+lazy optional entered at 3
+lazy optional entered at 2
+optional entered at 2
+lazy optional entered at 2
+optional entered at 3
+lazy optional entered at 3
+optional entered at 3
+optional entered at 4
+lazy optional entered at 4
+lazy optional entered at 3
+optional entered at 3
+lazy optional entered at 3
+optional entered at 4
+lazy optional entered at 4
+lazy optional entered at 1
+optional entered at 1
+optional entered at 2
+optional entered at 3
+lazy optional entered at 3
+lazy optional entered at 2
+optional entered at 2
+lazy optional entered at 2
+optional entered at 3
+lazy optional entered at 3
+lazy optional entered at 1
+optional entered at 1
+optional entered at 2
+lazy optional entered at 2
+lazy optional entered at 1
+optional entered at 1
+lazy optional entered at 1
+optional entered at 2
+lazy optional entered at 2
+optional entered at 2
+optional entered at 3
+lazy optional entered at 3
+lazy optional entered at 2
+optional entered at 2
+lazy optional entered at 2
+optional entered at 3
+lazy optional entered at 3
+optional entered at 2
+optional entered at 3
+optional entered at 4
+lazy optional entered at 4
+lazy optional entered at 3
+optional entered at 3
+lazy optional entered at 3
+optional entered at 4
+lazy optional entered at 4
+lazy optional entered at 2
+optional entered at 2
+optional entered at 3
+lazy optional entered at 3
+lazy optional entered at 2
+optional entered at 2
+lazy optional entered at 2
+optional entered at 3
+lazy optional entered at 3
+optional entered at 3
+optional entered at 4
+lazy optional entered at 4
+lazy optional entered at 3
+optional entered at 3
+lazy optional entered at 3
+optional entered at 4
+lazy optional entered at 4
+lazy optional entered at 0
+optional entered at 0
+optional entered at 1
+optional entered at 2
+optional entered at 3
+lazy optional entered at 3
+lazy optional entered at 2
+optional entered at 2
+lazy optional entered at 2
+optional entered at 3
+lazy optional entered at 3
+lazy optional entered at 1
+optional entered at 1
+optional entered at 2
+lazy optional entered at 2
+lazy optional entered at 1
+optional entered at 1
+lazy optional entered at 1
+optional entered at 2
+lazy optional entered at 2
+optional entered at 2
+optional entered at 3
+lazy optional entered at 3
+lazy optional entered at 2
+optional entered at 2
+lazy optional entered at 2
+optional entered at 3
+lazy optional entered at 3
+lazy optional entered at 0
+optional entered at 0
+optional entered at 1
+optional entered at 2
+lazy optional entered at 2
+lazy optional entered at 1
+optional entered at 1
+lazy optional entered at 1
+optional entered at 2
+lazy optional entered at 2
+lazy optional entered at 0
+optional entered at 0
+optional entered at 1
+lazy optional entered at 1
+lazy optional entered at 0
+optional entered at 0
+lazy optional entered at 0
