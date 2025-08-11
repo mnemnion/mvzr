@@ -12,25 +12,23 @@ pub fn build(b: *std.Build) void {
     // set a preferred release mode, allowing the user to decide how to optimize.
     const optimize = b.standardOptimizeOption(.{});
 
+    // Export as module to be available for @import("mvzr") on user site
+    const root_module = b.addModule("mvzr", .{
+        .root_source_file = b.path("src/mvzr.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
     const test_filters = b.option([]const []const u8, "test-filter", "Skip tests that do not match any filter") orelse &[0][]const u8{};
 
     // Creates a step for unit testing. This only builds the test executable
     // but does not run it.
     const lib_unit_tests = b.addTest(.{
-        .root_source_file = b.path("src/mvzr.zig"),
-        .target = target,
-        .optimize = optimize,
+        .root_module = root_module,
         .filters = test_filters,
     });
 
     const run_lib_unit_tests = b.addRunArtifact(lib_unit_tests);
-
-    // Export as module to be available for @import("mvzr") on user site
-    _ = b.addModule("mvzr", .{
-        .root_source_file = b.path("src/mvzr.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
 
     // Similar to creating the run step earlier, this exposes a `test` step to
     // the `zig build --help` menu, providing a way for the user to request
