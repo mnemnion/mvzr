@@ -256,16 +256,12 @@ pub const Match = struct {
 
     pub fn format(
         matched: Match,
-        comptime fmt: []const u8,
-        options: std.fmt.FormatOptions,
         writer: anytype,
     ) !void {
-        _ = fmt;
-        _ = options;
-        try writer.print("[{d}..{d}]: \"{}\"", .{
+        try writer.print("[{d}..{d}]: \"{f}\"", .{
             matched.start,
             matched.end,
-            std.zig.fmtEscapes(matched.slice),
+            std.zig.fmtString(matched.slice),
         });
     }
 };

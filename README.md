@@ -11,12 +11,14 @@ The provided Regex type allows 64 'operations' and 8 unique ASCII character sets
 Drop the file into your project, or use the Zig build system:
 
 ```zig
-zig fetch --save "https://github.com/mnemnion/mvzr/archive/refs/tags/v0.3.6.tar.gz"
+zig fetch --save "https://github.com/mnemnion/mvzr/archive/refs/tags/v0.3.7.tar.gz"
 ```
 
 I'll do my best to keep that URL fresh, but it pays to check over here: ➔
 
 For the latest release version.
+
+`v0.3.7` is the first version supporting Zig `0.15.1`, if you're still on `0.14`, stick with `v0.3.6`.
 
 ## Features
 
