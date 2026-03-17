@@ -463,15 +463,6 @@ fn matchStar(patt: []const RegOp, sets: []const CharSet, haystack: []const u8, i
     if (next_patt.len == 0) {
         return OpMatch{ .i = i, .j = next_patt };
     }
-    if (i == haystack.len) {
-        if (next_patt[0] == .end) {
-            // That's fine then
-            return OpMatch{ .i = i, .j = next_patt };
-        } else {
-            // We're not done, back off a bit
-            i -= 1; // Haystack always has len > 0 when this is reached.
-        }
-    }
 
     const maybe_next = matchPattern(next_patt, sets, haystack, i);
     if (maybe_next) |m2| {
@@ -2500,4 +2491,18 @@ test "rewrites coin address at the end" {
 test "word boundary with zero length haystack" {
     // Courtesy apvanzanten: https://github.com/mnemnion/mvzr/pull/8
     try testFail("\\b", "");
+}
+
+test "zero-match group after greedy star (issue #11)" {
+    const r = compile("^a*(b)*$").?;
+
+    try expect(r.isMatch("aab")); // OK — group matches once
+    try expect(r.isMatch("b")); // OK — a* matches 0, group matches once
+    try expect(r.isMatch("")); // OK — both match 0 times
+    try expect(r.isMatch("a")); // FAIL — returns false, expected true
+    try expect(r.isMatch("aaa")); // FAIL — returns false, expected true
+    try expect(compile("^a*(b)*$").?.isMatch("aaa")); // false
+    try expect(compile("^[a-z]*([_][a-z]+)*$").?.isMatch("abc")); // false
+    try expect(compile("^[a-z][a-z0-9]*([_-][a-z0-9]+)*$").?.isMatch("free")); // false
+    try expect(compile("^[a-z][a-z0-9]+([_-][a-z0-9]+)*$").?.isMatch("free")); // false
 }
