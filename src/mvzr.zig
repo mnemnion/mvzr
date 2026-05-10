@@ -179,11 +179,12 @@ pub fn SizedRegex(ops: comptime_int, char_sets: comptime_int) type {
             haystack: []const u8,
 
             pub fn next(iter: *RegexIterator) ?Match {
+                if (iter.idx > iter.haystack.len) return null;
                 const maybe_match = iter.regex.match(iter.haystack[iter.idx..]);
                 if (maybe_match) |m| {
                     const m_start = m.start + iter.idx;
                     const m_end = m.end + iter.idx;
-                    iter.idx += m.end;
+                    iter.idx += @max(m.end, 1);
                     return Match{
                         .slice = m.slice,
                         .start = m_start,
@@ -198,6 +199,7 @@ pub fn SizedRegex(ops: comptime_int, char_sets: comptime_int) type {
         fn matchInternal(regex: *const SizedRegexT, haystack: []const u8) ?struct { usize, usize } {
             const end = regex.findPatternEnd();
             const patt = regex.patt[0..end];
+            if (patt.len == 0) return .{ 0, 0 };
             switch (patt[0]) {
                 .begin => {
                     const matched = matchOuterPattern(patt[1..], &regex.sets, haystack, 0);
@@ -2351,6 +2353,31 @@ test "iteration" {
     matched = r_iter.next().?;
     try expectEqualStrings("foo", matched.slice);
     try expectEqualStrings("foo", foo_str[matched.start..matched.end]);
+    try expectEqual(null, r_iter.next());
+}
+
+test "iterator with empty regex" {
+    const foo_str = "foo";
+    var r_iter = compile("").?.iterator(foo_str);
+    var matched = r_iter.next().?;
+    try expectEqual(0, matched.start);
+    try expectEqual(0, matched.end);
+    matched = r_iter.next().?;
+    try expectEqual(1, matched.start);
+    try expectEqual(1, matched.end);
+    matched = r_iter.next().?;
+    try expectEqual(2, matched.start);
+    try expectEqual(2, matched.end);
+    matched = r_iter.next().?;
+    try expectEqual(3, matched.start);
+    try expectEqual(3, matched.end);
+    try expectEqual(null, r_iter.next());
+}
+
+test "iterator with empty alternation terminates" {
+    const foo_str = "foo";
+    var r_iter = compile("bar|").?.iterator(foo_str);
+    while (r_iter.next()) |_| {}
     try expectEqual(null, r_iter.next());
 }
 
