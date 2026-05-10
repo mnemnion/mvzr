@@ -2356,31 +2356,6 @@ test "iteration" {
     try expectEqual(null, r_iter.next());
 }
 
-test "iterator with empty regex" {
-    const foo_str = "foo";
-    var r_iter = compile("").?.iterator(foo_str);
-    var matched = r_iter.next().?;
-    try expectEqual(0, matched.start);
-    try expectEqual(0, matched.end);
-    matched = r_iter.next().?;
-    try expectEqual(1, matched.start);
-    try expectEqual(1, matched.end);
-    matched = r_iter.next().?;
-    try expectEqual(2, matched.start);
-    try expectEqual(2, matched.end);
-    matched = r_iter.next().?;
-    try expectEqual(3, matched.start);
-    try expectEqual(3, matched.end);
-    try expectEqual(null, r_iter.next());
-}
-
-test "iterator with empty alternation terminates" {
-    const foo_str = "foo";
-    var r_iter = compile("bar|").?.iterator(foo_str);
-    while (r_iter.next()) |_| {}
-    try expectEqual(null, r_iter.next());
-}
-
 test "matchPos" {
     const regex = Regex.compile("abcd").?;
     const matched = regex.matchPos(4, "abcdabcd").?;
@@ -2529,4 +2504,29 @@ test "zero-match group after greedy star (issue #11)" {
     try expect(compile("^[a-z]*([_][a-z]+)*$").?.isMatch("abc")); // false
     try expect(compile("^[a-z][a-z0-9]*([_-][a-z0-9]+)*$").?.isMatch("free")); // false
     try expect(compile("^[a-z][a-z0-9]+([_-][a-z0-9]+)*$").?.isMatch("free")); // false
+}
+
+test "iterator with empty regex" {
+    const foo_str = "foo";
+    var r_iter = compile("").?.iterator(foo_str);
+    var matched = r_iter.next().?;
+    try expectEqual(0, matched.start);
+    try expectEqual(0, matched.end);
+    matched = r_iter.next().?;
+    try expectEqual(1, matched.start);
+    try expectEqual(1, matched.end);
+    matched = r_iter.next().?;
+    try expectEqual(2, matched.start);
+    try expectEqual(2, matched.end);
+    matched = r_iter.next().?;
+    try expectEqual(3, matched.start);
+    try expectEqual(3, matched.end);
+    try expectEqual(null, r_iter.next());
+}
+
+test "iterator with empty alternation terminates" {
+    const foo_str = "foo";
+    var r_iter = compile("bar|").?.iterator(foo_str);
+    while (r_iter.next()) |_| {}
+    try expectEqual(null, r_iter.next());
 }
