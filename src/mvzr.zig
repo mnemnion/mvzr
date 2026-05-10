@@ -2317,10 +2317,6 @@ test "heap allocated regex and match" {
     try testOwnedRegex("^[a-f0-9]{32}", "0800fc577294c34e0b28ad2839435945");
 }
 
-test "badblood" {
-    //
-}
-
 test "Get the char sets you asked for" { // https://github.com/mnemnion/mvzr/issues/1#issuecomment-2235265209
     const test_patt = "(0[1-9]|1[012])[\\/](0[1-9]|[12][0-9]|3[01])[\\/][0-9]{4}";
     const j, const s = resourcesNeeded(test_patt);
@@ -2499,6 +2495,7 @@ test "zero-match group after greedy star (issue #11)" {
     try expect(r.isMatch("aab")); // OK — group matches once
     try expect(r.isMatch("b")); // OK — a* matches 0, group matches once
     try expect(r.isMatch("")); // OK — both match 0 times
+    // NB: comments below represent errors corrected, not current behavior
     try expect(r.isMatch("a")); // FAIL — returns false, expected true
     try expect(r.isMatch("aaa")); // FAIL — returns false, expected true
     try expect(compile("^a*(b)*$").?.isMatch("aaa")); // false
