@@ -455,10 +455,11 @@ fn matchStar(patt: []const RegOp, sets: []const CharSet, haystack: []const u8, i
     var i = i_in;
     const this_patt = thisPattern(patt);
     while (matchPattern(this_patt, sets, haystack, i)) |m| {
+        const i_before = i;
         i = m.i;
         assert(!(i > haystack.len));
         // End of string or no progress? break
-        if (i == haystack.len or i == i_in) break;
+        if (i == haystack.len or i == i_before) break;
     }
 
     const next_patt = nextPattern(patt);
@@ -563,6 +564,7 @@ fn matchLazyStar(patt: []const RegOp, sets: []const CharSet, haystack: []const u
     // Our turn
     match_first = matchPattern(this_patt, sets, haystack, i);
     if (match_first) |m| {
+        if (m.i == i) return OpMatch{ .i = i, .j = next_patt };
         i = m.i;
     }
     // Now we alternate
@@ -578,6 +580,7 @@ fn matchLazyStar(patt: []const RegOp, sets: []const CharSet, haystack: []const u
             const match_ours = matchPattern(this_patt, sets, haystack, i);
             if (match_ours) |m2| {
                 // Keep it up
+                if (m2.i == i) return OpMatch{ .i = i, .j = next_patt };
                 i = m2.i;
             } else {
                 // other guy's turn coming up
@@ -621,9 +624,10 @@ fn matchEagerStar(patt: []const RegOp, sets: []const CharSet, haystack: []const 
     const this_patt = thisPattern(patt);
     var i = i_in;
     while (matchPattern(this_patt, sets, haystack, i)) |m| {
+        const i_before = i;
         i = m.i;
         assert(!(i > haystack.len));
-        if (i == haystack.len) break;
+        if (i == haystack.len or i == i_before) break;
     }
     return OpMatch{ .i = i, .j = nextPattern(patt) };
 }
@@ -2504,6 +2508,15 @@ test "zero-match group after greedy star (issue #11)" {
     try expect(compile("^[a-z]*([_][a-z]+)*$").?.isMatch("abc")); // false
     try expect(compile("^[a-z][a-z0-9]*([_-][a-z0-9]+)*$").?.isMatch("free")); // false
     try expect(compile("^[a-z][a-z0-9]+([_-][a-z0-9]+)*$").?.isMatch("free")); // false
+}
+
+test "nested empty star terminates (issue #15)" {
+    const r = compile("(a*)*").?;
+
+    try expect(r.isMatch("ax"));
+
+    var r_iter = r.iterator("ax");
+    try expect(r_iter.next() != null);
 }
 
 test "iterator with empty regex" {
