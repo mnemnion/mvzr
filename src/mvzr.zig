@@ -2376,6 +2376,18 @@ test "comptime regex" {
     try expect(comptime_match != null);
 }
 
+test "comptime isMatch" {
+    const comp_regex = comptime compile("foo+").?;
+    const comp_is_match = comptime comp_regex.isMatch("foofoofoo");
+    try expect(comp_is_match);
+
+    // In Zig 0.16 uncommenting these lines will fail.
+    // What a clown show.
+
+    // const comp_regex2 = comptime compile("^[^#]*#?$").?;
+    // try expect(comptime comp_regex2.isMatch("https://example.com"));
+}
+
 test "date regex" {
     const match_date = Regex.compile("[0-9]{4}-[0-9]{2}-[0-9]{2}T([0-9]{2}:){2}[0-9]{2}([+|-][0-9]{2}:[0-9]{2})?").?;
     try expect(match_date.isMatch("2024-01-01T00:00:00"));
