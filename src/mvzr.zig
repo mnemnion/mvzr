@@ -202,7 +202,7 @@ pub fn SizedRegex(ops: comptime_int, char_sets: comptime_int) type {
             if (patt.len == 0) return .{ 0, 0 };
             switch (patt[0]) {
                 .begin => {
-                    const matched = matchOuterPattern(patt[1..], &regex.sets, haystack, 0);
+                    const matched: ?OpMatch = matchOuterPattern(patt[1..], &regex.sets, haystack, 0);
                     if (matched) |m| {
                         return .{ 0, m.i };
                     } else return null;
@@ -210,7 +210,7 @@ pub fn SizedRegex(ops: comptime_int, char_sets: comptime_int) type {
                 else => {
                     var matchlen: usize = 0;
                     while (matchlen <= haystack.len) : (matchlen += 1) {
-                        const matched = matchOuterPattern(patt, &regex.sets, haystack, matchlen);
+                        const matched: ?OpMatch = matchOuterPattern(patt, &regex.sets, haystack, matchlen);
                         if (matched) |m| {
                             return .{ matchlen, m.i };
                         }
@@ -360,7 +360,7 @@ fn matchPattern(patt: []const RegOp, sets: []const CharSet, haystack: []const u8
                 .right, .alt, .unused => unreachable,
             }
         }
-        const maybe_match = switch (this_patt[0]) {
+        const maybe_match: ?OpMatch = switch (this_patt[0]) {
             .dot,
             .class,
             .not_class,
@@ -2381,11 +2381,8 @@ test "comptime isMatch" {
     const comp_is_match = comptime comp_regex.isMatch("foofoofoo");
     try expect(comp_is_match);
 
-    // In Zig 0.16 uncommenting these lines will fail.
-    // What a clown show.
-
-    // const comp_regex2 = comptime compile("^[^#]*#?$").?;
-    // try expect(comptime comp_regex2.isMatch("https://example.com"));
+    const comp_regex2 = comptime compile("^[^#]*#?$").?;
+    try expect(comptime comp_regex2.isMatch("https://example.com"));
 }
 
 test "date regex" {
