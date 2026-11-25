@@ -19,7 +19,7 @@ character sets.  If you would like more, or less, you can call
 Drop the file into your project, or use the Zig build system:
 
 ```zig
-zig fetch --save "https://github.com/mnemnion/mvzr/archive/refs/tags/v0.3.9.tar.gz"
+zig fetch --save "https://github.com/mnemnion/mvzr/archive/refs/tags/v0.3.13.tar.gz"
 ```
 
 I'll do my best to keep that URL fresh, but it pays to check over here:
